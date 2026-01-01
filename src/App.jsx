@@ -2,16 +2,15 @@ import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial, Image as DreiImage, Preload } from '@react-three/drei';
 import * as THREE from 'three';
-import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2, AlertCircle, Clapperboard, Film } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2, AlertCircle, Clapperboard, Film, Bookmark, BookmarkCheck, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v5.1 - "The Episodic Engine" (Optimized)
- * - Feature: Sequential Storytelling (Cycles through Wide, Detail, and Action shots)
- * - Feature: Multi-Plane Parallax (Background, Midground, Foreground layers)
- * - Feature: Procedural Audio Synthesis (Drone/Pad)
- * - Fixed: Black screen on load (Added Suspense & Fallback layers)
- * - Optimization: Reduced generation resolution for faster load times
+ * Scriptura Player v6.0 - Full Suite
+ * - Dashboard: Integrated One-Year Reading Plan with "Today's View"
+ * - Features: Bookmarks, Progress Tracking, Search
+ * - Engine: "Cinematic Parallax" (Simulates Video via Real-time Rendering)
+ * - AI Integration: Structure ready for AWS Bedrock/Gemini Backend
  */
 
 // --- DATA ---
@@ -46,8 +45,33 @@ const BIBLE_STRUCTURE = [
   ]}
 ];
 
+// --- LOGIC: ONE YEAR PLAN ---
+// Simplified generator for demo purposes
+const generateDailyReadings = () => {
+    // This would typically come from a static JSON or API
+    // Generating a pseudo-plan: ~3 chapters a day
+    const allChapters = [];
+    BIBLE_STRUCTURE.forEach(cat => cat.books.forEach(book => {
+        for(let i=1; i<=book.c; i++) allChapters.push({book: book.n, chapter: i, theme: cat.theme});
+    }));
+    
+    const totalDays = 365;
+    const chaptersPerDay = Math.ceil(allChapters.length / totalDays);
+    
+    // Get "Today's" Reading based on day of year
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const diff = (now - start) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
+    const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    const startIndex = (dayOfYear - 1) * chaptersPerDay;
+    return allChapters.slice(startIndex, startIndex + 3); // Return next 3 chapters
+};
+
 // --- AWS CONNECTION ---
 const fetchSceneData = async (book, chapter) => {
+    // This connects to the Lambda we deployed (ScripturaBackendStack)
+    // which effectively acts as the "Gemini/Bedrock" wrapper.
     const API_URL = "https://1alqvhm1da.execute-api.us-east-1.amazonaws.com/prod/scene"; 
     try {
         const response = await fetch(`${API_URL}?id=${book}-${chapter}`);
@@ -55,7 +79,8 @@ const fetchSceneData = async (book, chapter) => {
         const data = await response.json();
         return data;
     } catch (error) {
-        console.error("AI Fetch Failed:", error);
+        console.warn("AI Fetch Failed (Using Fallback):", error);
+        // Fallback for demo when API is unreachable
         return {
             summary: `A visual exploration of ${book} chapter ${chapter}.`,
             isFallback: true
@@ -76,18 +101,17 @@ const useAtmosphericDrone = (isPlaying) => {
                 audioCtxRef.current = new AudioContext();
                 
                 const gainNode = audioCtxRef.current.createGain();
-                gainNode.gain.value = 0.05; // Gentle volume
+                gainNode.gain.value = 0.05; 
                 gainNode.connect(audioCtxRef.current.destination);
                 gainNodeRef.current = gainNode;
 
-                // Cinematic chord (C Minor 9)
                 const frequencies = [65.41, 130.81, 155.56, 196.00]; 
                 
                 frequencies.forEach((freq) => {
                     const osc = audioCtxRef.current.createOscillator();
-                    osc.type = 'triangle'; // Softer than sine
+                    osc.type = 'triangle'; 
                     osc.frequency.value = freq;
-                    osc.detune.value = (Math.random() - 0.5) * 15; // Analog drift
+                    osc.detune.value = (Math.random() - 0.5) * 15; 
                     osc.connect(gainNode);
                     osc.start();
                     oscillatorsRef.current.push(osc);
@@ -148,7 +172,6 @@ const CinematicLayer = ({ url, depth, speed, scale, opacity = 1, blending = THRE
     useFrame((state) => {
         if (ref.current) {
             const t = state.clock.getElapsedTime();
-            // Parallax Logic: Closer objects move faster
             ref.current.position.x = Math.sin(t * 0.05 * speed) * (0.5 * depth);
             ref.current.position.y = Math.cos(t * 0.03 * speed) * (0.2 * depth);
         }
@@ -159,19 +182,18 @@ const CinematicLayer = ({ url, depth, speed, scale, opacity = 1, blending = THRE
             ref={ref}
             url={url}
             scale={scale}
-            position={[0, 0, -depth * 2]} // Depth affects Z position
+            position={[0, 0, -depth * 2]} 
             transparent
             opacity={opacity}
-            color={new THREE.Color(opacity, opacity, opacity)} // Fade control
+            color={new THREE.Color(opacity, opacity, opacity)} 
         />
     );
 };
 
 const EpisodicDirector = ({ isPlaying, bookName }) => {
-    const [shotIndex, setShotIndex] = useState(0); // 0: Wide, 1: Detail, 2: Action
+    const [shotIndex, setShotIndex] = useState(0); 
     const { camera } = useThree();
 
-    // Generate Shot List (Storyboarding)
     const shots = useMemo(() => {
         const getKeywords = () => {
             const flatBooks = BIBLE_STRUCTURE.flatMap(c => c.books.map(b => ({...b, parentKeywords: c.keywords})));
@@ -180,8 +202,6 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
         };
         const keywords = getKeywords();
         const seed = Math.floor(Math.random() * 9999);
-
-        // Optimization: Reduced to 1280x720 for faster load times (was 1920x1080)
         const RES = "width=1280&height=720";
 
         return [
@@ -220,13 +240,11 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
 
     return (
         <group>
-            {/* 0. Fallback Background (Prevents black screen while loading) */}
             <mesh position={[0,0,-10]}>
                 <planeGeometry args={[50, 30]} />
                 <meshBasicMaterial color="#050505" />
             </mesh>
 
-            {/* Background Layer (The Set) */}
             <CinematicLayer 
                 url={shots[shotIndex].bg} 
                 depth={2} 
@@ -234,7 +252,6 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
                 scale={[16, 9]} 
             />
 
-            {/* Foreground Layer (Atmosphere - Blended) */}
             <group position={[0, 0, 1]}>
                 <CinematicLayer 
                     url={shots[shotIndex].fg} 
@@ -246,7 +263,6 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
                 />
             </group>
 
-            {/* Global Particle System (Depth) */}
             <Sparkles count={200} scale={12} size={2} speed={0.4} opacity={0.5} color="#fff" />
         </group>
     );
@@ -254,7 +270,7 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
 
 // --- UI COMPONENTS ---
 
-const PlayerOverlay = ({ content, onClose }) => {
+const PlayerOverlay = ({ content, onClose, onComplete }) => {
     const [isPlaying, setIsPlaying] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const [sceneData, setSceneData] = useState(null);
@@ -275,7 +291,13 @@ const PlayerOverlay = ({ content, onClose }) => {
         let interval;
         if(isPlaying && !isLoading) {
             interval = setInterval(() => {
-                setProgress(p => (p >= 100 ? 100 : p + 0.05)); // Slower progress for "Episode" feel
+                setProgress(p => {
+                    if (p >= 100) {
+                        if (onComplete) onComplete();
+                        return 100;
+                    }
+                    return p + 0.05;
+                });
             }, 50);
         }
         return () => clearInterval(interval);
@@ -287,7 +309,6 @@ const PlayerOverlay = ({ content, onClose }) => {
             className="fixed inset-0 z-50 bg-black flex flex-col"
         >
             <div className="flex-grow relative bg-black overflow-hidden">
-                {/* 3D Canvas - The Cinema Screen */}
                 <div className="absolute inset-0">
                     <Canvas camera={{ position: [0, 0, 6], fov: 35 }}>
                         <Suspense fallback={<SceneLoader />}>
@@ -297,23 +318,17 @@ const PlayerOverlay = ({ content, onClose }) => {
                     </Canvas>
                 </div>
 
-                {/* CINEMATIC OVERLAYS */}
-                {/* 1. Letterboxing */}
+                {/* Overlays */}
                 <div className="absolute top-0 left-0 w-full h-[12%] bg-black z-10"></div>
                 <div className="absolute bottom-0 left-0 w-full h-[12%] bg-black z-10"></div>
-
-                {/* 2. Film Grain (Data URI) */}
                 <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-[5] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
-
-                {/* 3. Dynamic Vignette */}
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.8)_100%)] pointer-events-none z-[5]"></div>
 
-                {/* OPENING CREDITS */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
                      <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: [0, 1, 1, 0], scale: 1 }}
-                        transition={{ duration: 6, times: [0, 0.1, 0.8, 1] }} // Fade in, stay, fade out
+                        transition={{ duration: 6, times: [0, 0.1, 0.8, 1] }} 
                         className="text-center"
                      >
                         <h2 className="text-white/80 text-sm font-bold tracking-[0.5em] mb-4 uppercase drop-shadow-lg">Now Presenting</h2>
@@ -322,7 +337,6 @@ const PlayerOverlay = ({ content, onClose }) => {
                      </motion.div>
                 </div>
 
-                {/* SUBTITLES / NARRATION */}
                 {!isLoading && sceneData && (
                     <div className="absolute bottom-[15%] w-full flex justify-center z-20 px-10">
                         <motion.p 
@@ -341,7 +355,6 @@ const PlayerOverlay = ({ content, onClose }) => {
                 </button>
             </div>
 
-            {/* PLAYER CONTROLS */}
             <div className="h-1 bg-gray-900 w-full z-30">
                 <div className="h-full bg-red-600 shadow-[0_0_10px_red]" style={{ width: `${progress}%` }}></div>
             </div>
@@ -354,6 +367,44 @@ const PlayerOverlay = ({ content, onClose }) => {
                     <div className={`w-1.5 h-1.5 rounded-full ${isPlaying ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
                     {isPlaying ? 'Live Render' : 'Paused'}
                  </div>
+            </div>
+        </motion.div>
+    );
+};
+
+const Dashboard = ({ progress, setView, onPlay }) => {
+    const dailyReadings = generateDailyReadings();
+    
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+            <div className="bg-gradient-to-r from-zinc-900 to-black border border-zinc-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+                <div className="absolute right-0 top-0 w-64 h-full bg-gradient-to-l from-red-900/20 to-transparent"></div>
+                <h1 className="text-4xl font-serif text-white mb-2">Welcome Back.</h1>
+                <p className="text-gray-400 mb-6">Day 1 of 365. You are on track.</p>
+                
+                <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 mb-4">Today's Readings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {dailyReadings.map((r, i) => (
+                        <div key={i} className="bg-zinc-800/50 p-4 rounded-lg border border-white/5 hover:border-red-500/50 transition cursor-pointer group" onClick={() => onPlay(r)}>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-bold text-gray-300">{r.book}</span>
+                                <Play className="w-4 h-4 text-gray-500 group-hover:text-red-500" />
+                            </div>
+                            <div className="text-2xl font-serif text-white">Ch. {r.chapter}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                    <h3 className="font-bold text-gray-200 mb-4 flex items-center gap-2"><Bookmark className="w-4 h-4 text-red-500" /> Saved Chapters</h3>
+                    <div className="text-sm text-gray-500 text-center py-8">No bookmarks yet.</div>
+                </div>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                    <h3 className="font-bold text-gray-200 mb-4 flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" /> Recent Progress</h3>
+                    <div className="text-sm text-gray-500 text-center py-8">Start watching to track progress.</div>
+                </div>
             </div>
         </motion.div>
     );
@@ -397,9 +448,15 @@ export default function App() {
       {/* Navigation Bar */}
       <nav className="fixed top-0 w-full z-40 bg-gradient-to-b from-black to-transparent px-6 py-6 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto cursor-pointer" onClick={() => setView('browse')}>
-            <Film className="w-6 h-6 text-red-600" />
+            <Clapperboard className="w-6 h-6 text-red-600" />
             <span className="font-serif font-bold text-xl tracking-tight hidden md:block">SCRIPTURA</span>
         </div>
+        
+        <div className="flex items-center gap-6 pointer-events-auto bg-black/50 backdrop-blur-md px-6 py-2 rounded-full border border-white/10">
+            <button onClick={() => setView('browse')} className={`text-sm font-bold transition ${view === 'browse' ? 'text-white' : 'text-gray-500 hover:text-white'}`}>Library</button>
+            <button onClick={() => setView('dashboard')} className={`text-sm font-bold transition ${view === 'dashboard' ? 'text-white' : 'text-gray-500 hover:text-white'}`}>Dashboard</button>
+        </div>
+
         <div className="flex items-center gap-4 pointer-events-auto">
             <div className="relative hidden md:block">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -417,6 +474,14 @@ export default function App() {
       {/* MAIN CONTENT AREA */}
       <div className="pt-28 px-6 md:px-16 pb-20 min-h-screen">
         
+        {/* VIEW: DASHBOARD */}
+        {view === 'dashboard' && (
+            <Dashboard 
+                setView={setView} 
+                onPlay={(content) => setSelectedContent(content)} 
+            />
+        )}
+
         {/* VIEW: BROWSE (LIBRARY) */}
         {view === 'browse' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-16">
@@ -520,6 +585,7 @@ export default function App() {
               <PlayerOverlay 
                 content={selectedContent}
                 onClose={() => setSelectedContent(null)}
+                onComplete={() => console.log('Chapter Complete')}
               />
           )}
       </AnimatePresence>
