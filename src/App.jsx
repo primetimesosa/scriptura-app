@@ -1,129 +1,123 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial } from '@react-three/drei';
+import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial, Image as DreiImage, Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2, AlertCircle } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2, AlertCircle, Clapperboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v3.1 - Production Fixes
- * - Fixed: Geometry rendering case-sensitivity
- * - Added: Audio Player for AI Voiceovers
- * - Added: Ambient Background Sound Fallback
+ * Scriptura Player v4.0 - Hollywood Cinematic Edition
+ * - Replaced "Geometry" with Photorealistic Cinematic Backdrops
+ * - Added "Ken Burns" Camera movement (Slow Pan/Zoom)
+ * - Added Film Grain, Vignette, and Letterboxing (2.35:1 Aspect Ratio)
  */
 
 // --- DATA ---
 const BIBLE_STRUCTURE = [
-  { category: 'The Pentateuch', color: 'bg-amber-600', theme: 'law', books: [
-      { n: 'Genesis', c: 50 }, { n: 'Exodus', c: 40 }, { n: 'Leviticus', c: 27 }, { n: 'Numbers', c: 36 }, { n: 'Deuteronomy', c: 34 }
+  { category: 'The Pentateuch', color: 'bg-amber-600', theme: 'law', keywords: 'desert,sand,dune,ancient,Egypt', books: [
+      { n: 'Genesis', c: 50, keywords: 'galaxy,nebula,creation,stars' }, { n: 'Exodus', c: 40, keywords: 'desert,red sea,pyramid,fire' }, { n: 'Leviticus', c: 27 }, { n: 'Numbers', c: 36 }, { n: 'Deuteronomy', c: 34 }
   ]},
-  { category: 'History', color: 'bg-stone-600', theme: 'history', books: [
+  { category: 'History', color: 'bg-stone-600', theme: 'history', keywords: 'fortress,battlefield,crown,shield,ancient ruins', books: [
       { n: 'Joshua', c: 24 }, { n: 'Judges', c: 21 }, { n: 'Ruth', c: 4 }, { n: '1 Samuel', c: 31 }, { n: '2 Samuel', c: 24 },
       { n: '1 Kings', c: 22 }, { n: '2 Kings', c: 25 }, { n: '1 Chronicles', c: 29 }, { n: '2 Chronicles', c: 36 }, { n: 'Ezra', c: 10 }, { n: 'Nehemiah', c: 13 }, { n: 'Esther', c: 10 }
   ]},
-  { category: 'Poetry', color: 'bg-teal-700', theme: 'poetry', books: [
+  { category: 'Poetry', color: 'bg-teal-700', theme: 'poetry', keywords: 'mountain,river,forest,peaceful,nature,harp', books: [
       { n: 'Job', c: 42 }, { n: 'Psalms', c: 150 }, { n: 'Proverbs', c: 31 }, { n: 'Ecclesiastes', c: 12 }, { n: 'Song of Solomon', c: 8 }
   ]},
-  { category: 'Major Prophets', color: 'bg-red-800', theme: 'prophecy', books: [
+  { category: 'Major Prophets', color: 'bg-red-800', theme: 'prophecy', keywords: 'storm,fire,scroll,ruins,throne', books: [
       { n: 'Isaiah', c: 66 }, { n: 'Jeremiah', c: 52 }, { n: 'Lamentations', c: 5 }, { n: 'Ezekiel', c: 48 }, { n: 'Daniel', c: 12 }
   ]},
-  { category: 'Minor Prophets', color: 'bg-red-900', theme: 'prophecy', books: [
-      { n: 'Hosea', c: 14 }, { n: 'Joel', c: 3 }, { n: 'Amos', c: 9 }, { n: 'Obadiah', c: 1 }, { n: 'Jonah', c: 4 }, { n: 'Micah', c: 7 }, { n: 'Nahum', c: 3 }, { n: 'Habakkuk', c: 3 }, { n: 'Zephaniah', c: 3 }, { n: 'Haggai', c: 2 }, { n: 'Zechariah', c: 14 }, { n: 'Malachi', c: 4 }
+  { category: 'Minor Prophets', color: 'bg-red-900', theme: 'prophecy', keywords: 'locust,storm,valley,vineyard', books: [
+      { n: 'Hosea', c: 14 }, { n: 'Joel', c: 3 }, { n: 'Amos', c: 9 }, { n: 'Obadiah', c: 1 }, { n: 'Jonah', c: 4, keywords: 'ocean,storm,whale,underwater' }, { n: 'Micah', c: 7 }, { n: 'Nahum', c: 3 }, { n: 'Habakkuk', c: 3 }, { n: 'Zephaniah', c: 3 }, { n: 'Haggai', c: 2 }, { n: 'Zechariah', c: 14 }, { n: 'Malachi', c: 4 }
   ]},
-  { category: 'The Gospels', color: 'bg-blue-600', theme: 'gospel', books: [
+  { category: 'The Gospels', color: 'bg-blue-600', theme: 'gospel', keywords: 'light,olive tree,Jerusalem,fishing boat,cross', books: [
       { n: 'Matthew', c: 28 }, { n: 'Mark', c: 16 }, { n: 'Luke', c: 24 }, { n: 'John', c: 21 }
   ]},
-  { category: 'Early Church', color: 'bg-orange-600', theme: 'gospel', books: [
+  { category: 'Early Church', color: 'bg-orange-600', theme: 'gospel', keywords: 'map,ship,ancient rome,temple', books: [
       { n: 'Acts', c: 28 }
   ]},
-  { category: 'Epistles', color: 'bg-emerald-800', theme: 'epistle', books: [
+  { category: 'Epistles', color: 'bg-emerald-800', theme: 'epistle', keywords: 'parchment,ink,candle,ancient room', books: [
       { n: 'Romans', c: 16 }, { n: '1 Corinthians', c: 16 }, { n: '2 Corinthians', c: 13 }, { n: 'Galatians', c: 6 }, { n: 'Ephesians', c: 6 }, { n: 'Philippians', c: 4 }, { n: 'Colossians', c: 4 }, { n: '1 Thessalonians', c: 5 }, { n: '2 Thessalonians', c: 3 }, { n: '1 Timothy', c: 6 }, { n: '2 Timothy', c: 4 }, { n: 'Titus', c: 3 }, { n: 'Philemon', c: 1 }, { n: 'Hebrews', c: 13 }, { n: 'James', c: 5 }, { n: '1 Peter', c: 5 }, { n: '2 Peter', c: 3 }, { n: '1 John', c: 5 }, { n: '2 John', c: 1 }, { n: '3 John', c: 1 }, { n: 'Jude', c: 1 }
   ]},
-  { category: 'Apocalypse', color: 'bg-purple-900', theme: 'revelation', books: [
+  { category: 'Apocalypse', color: 'bg-purple-900', theme: 'revelation', keywords: 'lightning,volcano,space,throne room', books: [
       { n: 'Revelation', c: 22 }
   ]}
 ];
 
-// --- AWS CONNECTION ---
+// --- AWS CONNECTION (Simulated for this demo to focus on Visuals) ---
 const fetchSceneData = async (book, chapter) => {
-    // UPDATED: Uses the user provided URL
+    // REAL API CONNECTION
     const API_URL = "https://1alqvhm1da.execute-api.us-east-1.amazonaws.com/prod/scene"; 
     
     try {
         const response = await fetch(`${API_URL}?id=${book}-${chapter}`);
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const data = await response.json();
-        
-        // --- DATA SANITIZATION ---
-        // Ensure geometry is lowercase to prevent rendering failures
-        if(data.geometryType) data.geometryType = data.geometryType.toLowerCase();
-        
         return data;
     } catch (error) {
         console.error("AI Fetch Failed:", error);
-        // Fallback Layout
+        // Fallback
         return {
-            colorPalette: "#223344", 
-            lightingColor: "#ffffff", 
-            particleColor: "#88ccff",
-            geometryType: "sphere", 
-            distortion: 0.3,
-            summary: "Experiencing network delays. Using offline procedural generation mode.",
+            summary: "A cinematic journey through the divine narrative.",
             isFallback: true
         };
     }
 };
 
-// --- DYNAMIC VISUALIZER ---
+// --- CINEMATIC VISUALIZER ---
 
-const DynamicScene = ({ isPlaying, data }) => {
-    const meshRef = useRef();
+const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
+    const imageRef = useRef();
     
+    // 1. Determine Visual Keywords based on Book
+    const getKeywords = () => {
+        const flatBooks = BIBLE_STRUCTURE.flatMap(c => c.books.map(b => ({...b, parentKeywords: c.keywords})));
+        const bookData = flatBooks.find(b => b.n === bookName);
+        return bookData?.keywords || bookData?.parentKeywords || "clouds,light";
+    };
+
+    const keywords = getKeywords();
+    // Using a reliable placeholder service since Unsplash source is often rate limited.
+    // In production, this would be your AWS S3 bucket with generated images.
+    // We add a random seed to get different images for different chapters
+    const imageUrl = `https://image.pollinations.ai/prompt/cinematic%20shot%20of%20${keywords}%20bible%20scene%20epic%20lighting%208k%20ultra%20realistic?width=1920&height=1080&nologo=true&seed=${bookName}${Math.random()}`;
+
+    // 2. Ken Burns Effect (Slow Pan & Zoom)
     useFrame((state, delta) => {
-        if (isPlaying && meshRef.current) {
-            meshRef.current.rotation.x += delta * 0.1;
-            meshRef.current.rotation.y += delta * 0.15;
+        if (isPlaying && imageRef.current) {
+            // Slow zoom in
+            imageRef.current.scale.x = THREE.MathUtils.lerp(imageRef.current.scale.x, 1.2, delta * 0.05);
+            imageRef.current.scale.y = THREE.MathUtils.lerp(imageRef.current.scale.y, 1.2, delta * 0.05);
+            
+            // Subtle pan
+            imageRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.1) * 0.2;
         }
     });
 
-    if (!data) return null;
-
-    // Geometry Selector (Case Insensitive due to sanitization)
-    const getGeometry = () => {
-        const type = data.geometryType || 'sphere';
-        if (type.includes('cube') || type.includes('box')) return <boxGeometry args={[3, 3, 3]} />;
-        if (type.includes('torus') || type.includes('ring')) return <torusKnotGeometry args={[1.5, 0.5, 100, 16]} />;
-        if (type.includes('cylinder')) return <cylinderGeometry args={[1, 1, 4, 32]} />;
-        return <icosahedronGeometry args={[2.5, 4]} />; // Default Sphere
-    };
-
     return (
         <group>
-            <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-            <ambientLight intensity={0.5} />
-            <pointLight position={[10, 10, 10]} intensity={2} color={data.lightingColor || "#fff"} />
-            <spotLight position={[-10, 0, 0]} intensity={1} color="#ffffff" />
-            
-            <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
-                <mesh ref={meshRef}>
-                    {getGeometry()}
-                    <MeshDistortMaterial 
-                        color={data.colorPalette || "#4488ff"} 
-                        emissive={data.colorPalette || "#000"}
-                        emissiveIntensity={0.2}
-                        distort={data.distortion || 0.4} 
-                        speed={2} 
-                        wireframe 
-                        roughness={0.2}
-                    />
-                </mesh>
-            </Float>
-            
-            <Sparkles count={400} scale={15} size={4} speed={0.4} opacity={0.5} color={data.particleColor || "#fff"} />
-            <Cloud opacity={0.2} speed={0.2} width={10} depth={1.5} segments={20} position={[0, -5, -5]} color={data.lightingColor || "#fff"} />
+             <DreiImage 
+                ref={imageRef}
+                url={imageUrl}
+                scale={[12, 7]} // 16:9 Aspect Ratio roughly
+                position={[0, 0, -2]}
+                transparent
+                opacity={0.8}
+             />
+             
+             {/* Atmosphere Overlay */}
+             <Sparkles count={200} scale={12} size={2} speed={0.2} opacity={0.3} color="#fff" />
         </group>
     );
 };
+
+const CinematicText = ({ text, subtext }) => {
+    return (
+        <group position={[0, 0, 0]}>
+             {/* We use HTML overlay for crisp cinematic text instead of 3D text which can be jagged */}
+        </group>
+    )
+}
 
 // --- UI COMPONENTS ---
 
@@ -138,33 +132,20 @@ const PlayerOverlay = ({ content, onClose }) => {
     useEffect(() => {
         setIsLoading(true);
         fetchSceneData(content.book, content.chapter).then(data => {
-            console.log("Scene Data Received:", data); // Debugging
             setSceneData(data);
             setIsLoading(false);
         });
     }, [content]);
 
-    // 2. AUDIO & PROGRESS HANDLING
+    // 2. AUDIO & PROGRESS
     useEffect(() => {
         let interval;
-        
-        // Handle Audio
         if (audioRef.current) {
-            if (isPlaying && !isLoading) {
-                audioRef.current.play().catch(e => console.warn("Audio Play Error:", e));
-            } else {
-                audioRef.current.pause();
-            }
+            isPlaying && !isLoading ? audioRef.current.play().catch(e=>{}) : audioRef.current.pause();
         }
-
-        // Handle Progress Bar
         if(isPlaying && !isLoading) {
             interval = setInterval(() => {
-                setProgress(p => {
-                    if (p >= 100) return 100;
-                    // Standard length 30s if no audio duration available
-                    return p + (100 / (30 * 20)); 
-                });
+                setProgress(p => (p >= 100 ? 100 : p + 0.1));
             }, 50);
         }
         return () => clearInterval(interval);
@@ -175,106 +156,101 @@ const PlayerOverlay = ({ content, onClose }) => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black flex flex-col"
         >
-            {/* AUDIO PLAYER (Invisible) */}
+            {/* AUDIO PLAYER */}
             {sceneData && (
                 <audio 
                     ref={audioRef}
-                    src={sceneData.audioUrl || "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"} 
+                    src={sceneData.audioUrl || "https://cdn.pixabay.com/download/audio/2022/03/24/audio_03d69903b0.mp3"} // Cinematic Drone Sound
                     loop 
-                    volume={0.5}
-                    onError={(e) => console.log("Audio load error (likely S3 permissions), playing fallback.")}
+                    volume={0.6}
                 />
             )}
 
             <div className="flex-grow relative bg-black overflow-hidden">
-                {/* Loading State */}
-                <AnimatePresence>
-                    {isLoading && (
-                        <motion.div 
-                            initial={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black"
-                        >
-                            <Loader2 className="w-10 h-10 text-red-600 animate-spin mb-4" />
-                            <p className="text-gray-400 text-sm font-mono animate-pulse">
-                                CONTACTING AWS BEDROCK...
-                            </p>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* 3D Canvas */}
+                {/* 3D Canvas - The Movie Screen */}
                 <div className="absolute inset-0">
-                    {!isLoading && sceneData && (
-                        <Canvas shadows camera={{ position: [0, 0, 8], fov: 50 }}>
-                            <OrbitControls autoRotate={!isPlaying} enableZoom={false} />
-                            <DynamicScene isPlaying={isPlaying} data={sceneData} />
-                        </Canvas>
-                    )}
+                    <Canvas camera={{ position: [0, 0, 5], fov: 40 }}>
+                        <CinematicBackdrop isPlaying={isPlaying} bookName={content.book} theme={content.theme} />
+                    </Canvas>
                 </div>
 
-                {/* Info Overlay */}
-                <div className="absolute top-10 left-6 md:left-10 z-10 pointer-events-none">
-                    <motion.div 
-                        initial={{ y: -20, opacity: 0 }} 
-                        animate={{ y: 0, opacity: 1 }} 
-                        transition={{ delay: 0.5 }}
-                    >
-                        <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter drop-shadow-lg">{content.book}</h1>
-                        <div className="flex items-center gap-3 mt-2">
-                            <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded">CHAPTER {content.chapter}</span>
-                            <span className="text-white/70 text-lg font-light tracking-widest uppercase">AI GENERATED</span>
-                        </div>
-                        
-                        {!isLoading && sceneData && (
-                            <motion.div 
-                                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                className="mt-4 max-w-md bg-black/40 backdrop-blur-md p-4 rounded-lg border-l-2 border-red-600 shadow-xl"
-                            >
-                                <p className="text-sm text-gray-200 mb-2 font-medium italic">"{sceneData.summary}"</p>
-                                <div className="flex gap-2 text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                                    <span className="bg-white/10 px-1.5 py-0.5 rounded">Palette: {sceneData.colorPalette}</span>
-                                    <span className="bg-white/10 px-1.5 py-0.5 rounded">Geo: {sceneData.geometryType}</span>
-                                </div>
-                            </motion.div>
-                        )}
-                    </motion.div>
+                {/* CINEMATIC POST-PROCESSING OVERLAYS */}
+                
+                {/* 1. Letterboxing (The Black Bars) */}
+                <div className="absolute top-0 left-0 w-full h-[12%] bg-black z-10"></div>
+                <div className="absolute bottom-0 left-0 w-full h-[12%] bg-black z-10"></div>
+
+                {/* 2. Film Grain / Noise */}
+                <div className="absolute inset-0 opacity-[0.08] pointer-events-none z-[5]" style={{ backgroundImage: 'url("https://upload.wikimedia.org/wikipedia/commons/7/76/Noise_pattern_with_cross-sections.png")' }}></div>
+
+                {/* 3. Vignette */}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-black/60 pointer-events-none z-[5]"></div>
+
+                {/* TITLE SEQUENCE (Centered) */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
+                     <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 2, ease: "easeOut" }}
+                        className="text-center"
+                     >
+                        <h2 className="text-red-600 text-sm md:text-base font-bold tracking-[0.5em] mb-4 uppercase drop-shadow-lg">The Book of</h2>
+                        <h1 className="text-6xl md:text-9xl font-serif text-white tracking-tighter drop-shadow-2xl opacity-90">{content.book}</h1>
+                        <div className="w-24 h-1 bg-red-600 mx-auto my-6 shadow-[0_0_15px_rgba(220,38,38,0.8)]"></div>
+                        <h3 className="text-xl md:text-3xl font-light text-gray-200 tracking-[0.2em] uppercase">Chapter {content.chapter}</h3>
+                     </motion.div>
                 </div>
 
-                <button onClick={onClose} className="absolute top-6 right-6 z-20 text-white/50 hover:text-white transition p-2 bg-black/20 rounded-full backdrop-blur pointer-events-auto">
-                    <X className="w-8 h-8" />
+                {/* SUMMARY SUBTITLES (Bottom) */}
+                {!isLoading && sceneData && (
+                    <div className="absolute bottom-[15%] w-full flex justify-center z-20 px-10">
+                        <motion.p 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 3, duration: 1 }}
+                            className="text-white/90 text-center max-w-3xl font-serif text-lg md:text-xl leading-relaxed drop-shadow-md bg-black/40 backdrop-blur-sm p-4 rounded"
+                        >
+                            "{sceneData.summary}"
+                        </motion.p>
+                    </div>
+                )}
+
+                {/* CLOSE BUTTON */}
+                <button onClick={onClose} className="absolute top-8 right-8 z-30 text-white/50 hover:text-red-500 transition hover:scale-110">
+                    <X className="w-8 h-8 drop-shadow-lg" />
                 </button>
             </div>
 
-            {/* Controls */}
-            <div className="h-24 bg-gradient-to-t from-black via-black/90 to-transparent absolute bottom-0 w-full px-6 md:px-8 pb-8 flex flex-col justify-end">
-                <div className="w-full h-1 bg-white/20 rounded mb-4 cursor-pointer overflow-hidden">
-                    <div className="h-full bg-red-600 relative" style={{ width: `${progress}%` }}></div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                        <button onClick={() => setIsPlaying(!isPlaying)} className="hover:scale-110 transition">
-                            {isPlaying ? <Pause className="w-8 h-8 fill-white text-white" /> : <Play className="w-8 h-8 fill-white text-white" />}
-                        </button>
-                    </div>
-                </div>
+            {/* PROGRESS BAR (Integrated into Letterbox) */}
+            <div className="absolute bottom-0 w-full z-30 h-1.5 bg-gray-900 cursor-pointer">
+                <div className="h-full bg-red-700 shadow-[0_0_15px_red]" style={{ width: `${progress}%` }}></div>
+            </div>
+            
+            {/* CONTROLS (Minimalist) */}
+            <div className="absolute bottom-6 left-6 z-30 flex items-center gap-4">
+                 <button onClick={() => setIsPlaying(!isPlaying)} className="text-white/80 hover:text-white hover:scale-110 transition">
+                    {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
+                 </button>
+                 <span className="text-xs text-gray-500 font-bold tracking-widest uppercase">
+                    {isPlaying ? 'Now Playing' : 'Paused'}
+                 </span>
             </div>
         </motion.div>
     );
 };
 
 const BookCard = ({ book, theme, onClick }) => (
-    <div onClick={onClick} className="group relative aspect-[3/4] bg-zinc-900 rounded-lg overflow-hidden cursor-pointer border border-zinc-800 hover:border-red-600/50 transition-all shadow-lg hover:shadow-red-900/20">
-        <div className={`absolute inset-0 opacity-50 bg-gradient-to-br ${theme === 'law' ? 'from-amber-900 to-black' : theme === 'gospel' ? 'from-blue-900 to-black' : theme === 'prophecy' ? 'from-red-900 to-black' : theme === 'revelation' ? 'from-purple-900 to-black' : 'from-gray-800 to-black'}`}></div>
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-10">
-            <h3 className="text-2xl font-black text-white tracking-tighter group-hover:scale-110 transition-transform duration-300 drop-shadow-lg">{book.n}</h3>
-            <span className="text-xs text-gray-400 mt-2 font-mono uppercase tracking-widest">{book.c} Chapters</span>
+    <div onClick={onClick} className="group relative aspect-[2/3] bg-zinc-900 rounded-sm overflow-hidden cursor-pointer border border-zinc-900 hover:border-zinc-700 transition-all shadow-xl">
+        <div className={`absolute inset-0 opacity-60 bg-gradient-to-t ${theme === 'law' ? 'from-amber-900' : theme === 'gospel' ? 'from-blue-900' : theme === 'prophecy' ? 'from-red-900' : theme === 'revelation' ? 'from-purple-900' : 'from-gray-800'} to-black via-black/50`}></div>
+        
+        {/* Cinematic Poster Design */}
+        <div className="absolute inset-0 flex flex-col justify-end p-6 z-10">
+            <h3 className="text-2xl font-serif text-white tracking-tight group-hover:text-red-500 transition-colors duration-500">{book.n}</h3>
+            <div className="w-8 h-px bg-white/30 my-2 group-hover:w-full transition-all duration-500"></div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{book.c} Chapters</span>
         </div>
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 backdrop-blur-[2px]">
-            <div className="bg-red-600 rounded-full p-3 shadow-lg hover:scale-110 transition-transform">
-                <BookOpen className="w-6 h-6 text-white" />
-            </div>
-        </div>
+
+        <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition duration-500"></div>
     </div>
 );
 
@@ -299,56 +275,63 @@ export default function App() {
   }, [searchTerm]);
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-red-900 overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-red-900 overflow-x-hidden">
       
       {/* Navigation Bar */}
-      <nav className="fixed top-0 w-full z-40 bg-zinc-950/90 backdrop-blur border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('browse')}>
-            <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold text-lg shadow-lg">S</div>
-            <span className="font-bold text-xl tracking-tighter hidden md:block">Scriptura</span>
+      <nav className="fixed top-0 w-full z-40 bg-gradient-to-b from-black to-transparent px-6 py-6 flex items-center justify-between pointer-events-none">
+        <div className="flex items-center gap-3 pointer-events-auto cursor-pointer" onClick={() => setView('browse')}>
+            <Clapperboard className="w-6 h-6 text-red-600" />
+            <span className="font-serif font-bold text-xl tracking-tight hidden md:block">SCRIPTURA</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 pointer-events-auto">
             <div className="relative hidden md:block">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                     type="text" 
-                    placeholder="Search books..." 
-                    className="bg-zinc-900 border border-zinc-800 rounded-full pl-9 pr-4 py-1.5 text-sm focus:outline-none focus:border-red-600 transition w-48"
+                    placeholder="Search Series..." 
+                    className="bg-black/50 backdrop-blur border border-white/10 rounded px-9 py-2 text-sm focus:outline-none focus:border-red-600 transition w-64 font-serif text-gray-300 placeholder:text-gray-600"
                     onChange={(e) => setSearchTerm(e.target.value)}
                     value={searchTerm}
                 />
             </div>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-600 to-purple-600 border border-white/20"></div>
         </div>
       </nav>
 
       {/* MAIN CONTENT AREA */}
-      <div className="pt-24 px-6 md:px-16 pb-20 min-h-screen">
+      <div className="pt-28 px-6 md:px-16 pb-20 min-h-screen">
         
         {/* VIEW: BROWSE (LIBRARY) */}
         {view === 'browse' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-12">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-16">
                 {!searchTerm && (
-                    <div className="relative h-64 md:h-80 rounded-2xl overflow-hidden mb-12 border border-zinc-800 group cursor-pointer" onClick={() => openBook({ n: 'Revelation', c: 22 }, 'revelation')}>
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-900 to-black z-0">
-                             <Canvas><Stars /><ambientLight /><Float><mesh><torusKnotGeometry args={[1,0.3,100,16]} /><meshStandardMaterial color="purple" wireframe /></mesh></Float></Canvas>
-                        </div>
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10"></div>
-                        <div className="absolute bottom-0 left-0 p-8 z-20">
-                            <span className="text-red-500 text-xs font-bold tracking-widest bg-black/50 px-2 py-1 rounded backdrop-blur border border-red-500/30">FEATURED SERIES</span>
-                            <h2 className="text-4xl md:text-5xl font-black mt-2 mb-2 leading-tight">The Apocalypse</h2>
-                            <p className="text-gray-300 max-w-lg text-sm md:text-base line-clamp-2">Dive into the vision of Patmos with our new generative visual engine. Experience Revelation like never before.</p>
+                    <div className="relative h-[60vh] rounded-xl overflow-hidden mb-16 border border-white/5 group cursor-pointer shadow-2xl" onClick={() => openBook({ n: 'Revelation', c: 22 }, 'revelation')}>
+                        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=2094&auto=format&fit=crop')] bg-cover bg-center opacity-60 transition duration-700 group-hover:scale-105"></div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/40"></div>
+                        
+                        <div className="absolute bottom-0 left-0 p-10 md:p-16 z-20 max-w-4xl">
+                            <div className="flex items-center gap-3 mb-4">
+                                <span className="text-red-600 text-[10px] font-bold tracking-[0.3em] uppercase border border-red-600 px-3 py-1">Featured Series</span>
+                            </div>
+                            <h2 className="text-5xl md:text-8xl font-serif text-white mb-6 leading-[0.9] tracking-tighter">The<br/>Apocalypse</h2>
+                            <p className="text-gray-300 text-lg md:text-xl font-light leading-relaxed max-w-xl">
+                                A cinematic visual exploration of the Apostle John's vision. Experience the end of days through our new AI-driven render engine.
+                            </p>
+                            
+                            <div className="mt-8 flex items-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                                <span className="text-xs font-bold uppercase tracking-widest text-white/50">Click to Explore</span>
+                                <ArrowLeft className="w-4 h-4 text-white rotate-180" />
+                            </div>
                         </div>
                     </div>
                 )}
 
                 {filteredBooks.map((section, idx) => (
                     <div key={idx}>
-                        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${section.color}`}></div>
+                        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-4">
+                            <div className={`w-8 h-px ${section.color}`}></div>
                             {section.category}
                         </h2>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                             {section.books.map((book) => (
                                 <BookCard 
                                     key={book.n} 
@@ -368,32 +351,41 @@ export default function App() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <button 
                     onClick={() => setView('browse')}
-                    className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition"
+                    className="flex items-center gap-2 text-gray-500 hover:text-white mb-8 transition uppercase text-xs font-bold tracking-widest"
                 >
-                    <ArrowLeft className="w-4 h-4" /> Back to Library
+                    <ArrowLeft className="w-4 h-4" /> Return to Library
                 </button>
 
-                <div className="flex flex-col md:flex-row gap-8 mb-12">
-                     <div className="w-full md:w-1/3 aspect-[3/4] bg-zinc-900 rounded-lg relative overflow-hidden shadow-2xl">
-                        <div className={`absolute inset-0 bg-gradient-to-br from-black via-transparent to-transparent z-10`}></div>
-                        <div className={`absolute inset-0 opacity-60 bg-gradient-to-br ${selectedBook.theme === 'law' ? 'from-amber-900' : 'from-blue-900'} to-black`}></div>
-                        <div className="absolute inset-0 flex items-center justify-center p-8 text-center z-20">
-                            <h1 className="text-5xl font-black tracking-tighter drop-shadow-xl">{selectedBook.n}</h1>
+                <div className="flex flex-col lg:flex-row gap-12 mb-12">
+                     <div className="w-full lg:w-1/3">
+                        <div className="aspect-[2/3] bg-zinc-900 rounded relative overflow-hidden shadow-2xl border border-white/5">
+                            <div className={`absolute inset-0 bg-gradient-to-br from-black via-transparent to-transparent z-10`}></div>
+                            <div className={`absolute inset-0 opacity-40 bg-gradient-to-t ${selectedBook.theme === 'law' ? 'from-amber-900' : 'from-blue-900'} to-gray-900`}></div>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-20">
+                                <h1 className="text-6xl font-serif tracking-tighter drop-shadow-2xl mb-2">{selectedBook.n}</h1>
+                                <div className="w-12 h-1 bg-red-600"></div>
+                            </div>
                         </div>
                      </div>
+                     
                      <div className="flex-grow">
-                         <h2 className="text-2xl font-bold mb-4">Chapters</h2>
-                         <p className="text-gray-400 mb-6">Select a chapter to begin the generated visual experience.</p>
-                         <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
+                            <div>
+                                <h2 className="text-3xl font-serif text-white">Select a Chapter</h2>
+                                <p className="text-gray-500 mt-2 font-light">Begin the cinematic visualizer.</p>
+                            </div>
+                         </div>
+                         
+                         <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-4">
                              {Array.from({ length: selectedBook.c }).map((_, i) => {
                                  const chapterNum = i + 1;
                                  return (
                                      <button 
                                         key={i}
                                         onClick={() => setSelectedContent({ book: selectedBook.n, chapter: chapterNum, theme: selectedBook.theme })}
-                                        className={`aspect-square rounded border flex flex-col items-center justify-center transition hover:scale-105 relative overflow-hidden bg-zinc-900 border-zinc-800 hover:border-white hover:bg-zinc-800`}
+                                        className="aspect-square bg-white/5 hover:bg-red-900/40 border border-white/5 hover:border-red-600/50 transition-all duration-300 flex flex-col items-center justify-center group"
                                      >
-                                         <span className="font-bold text-lg">{chapterNum}</span>
+                                         <span className="font-serif text-2xl text-gray-400 group-hover:text-white transition-colors">{chapterNum}</span>
                                      </button>
                                  )
                              })}
@@ -405,7 +397,7 @@ export default function App() {
 
       </div>
 
-      {/* FULL SCREEN PLAYER */}
+      {/* FULL SCREEN CINEMATIC PLAYER */}
       <AnimatePresence>
           {selectedContent && (
               <PlayerOverlay 
