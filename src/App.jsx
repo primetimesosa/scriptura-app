@@ -6,10 +6,10 @@ import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, M
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v4.2 - Production Fixes
+ * Scriptura Player v4.4 - Production Fixes
+ * - Fixed: Audio 503/403 Errors (Replaced external MP3s with Procedural Web Audio Synth)
+ * - Fixed: Broken Film Grain Texture (Using Data URI)
  * - Fixed: Massive Duplicate Network Requests (Memoized Image Generation)
- * - Fixed: 403 Forbidden on Audio (Replaced Pixabay with Archive.org)
- * - Fixed: Image URL Encoding (Sanitized AI Prompts)
  * - Feature: Cinematic "Ken Burns" Effect
  */
 
@@ -65,6 +65,70 @@ const fetchSceneData = async (book, chapter) => {
     }
 };
 
+// --- PROCEDURAL AUDIO HOOK (The "Drone" Synth) ---
+const useAtmosphericDrone = (isPlaying) => {
+    const audioCtxRef = useRef(null);
+    const gainNodeRef = useRef(null);
+    const oscillatorsRef = useRef([]);
+
+    useEffect(() => {
+        if (isPlaying) {
+            // Initialize AudioContext only when playing starts
+            if (!audioCtxRef.current) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtxRef.current = new AudioContext();
+                
+                // Create Master Volume (Low ambient level)
+                const gainNode = audioCtxRef.current.createGain();
+                gainNode.gain.value = 0.1; 
+                gainNode.connect(audioCtxRef.current.destination);
+                gainNodeRef.current = gainNode;
+
+                // Create a chord of low sine waves for a "Holy/Cinematic" Drone
+                const frequencies = [110, 164.8, 196, 220]; // A major-ish chord/pad
+                
+                frequencies.forEach((freq, i) => {
+                    const osc = audioCtxRef.current.createOscillator();
+                    osc.type = 'sine'; // Smooth sound
+                    osc.frequency.value = freq;
+                    
+                    // Slight detune for richness
+                    osc.detune.value = (Math.random() - 0.5) * 10; 
+                    
+                    osc.connect(gainNode);
+                    osc.start();
+                    oscillatorsRef.current.push(osc);
+                });
+            } else if (audioCtxRef.current.state === 'suspended') {
+                audioCtxRef.current.resume();
+            }
+            
+            // Fade in
+            if(gainNodeRef.current) {
+                gainNodeRef.current.gain.setTargetAtTime(0.1, audioCtxRef.current.currentTime, 1);
+            }
+
+        } else {
+            // Fade out and suspend
+            if (audioCtxRef.current && gainNodeRef.current) {
+                gainNodeRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.5);
+                setTimeout(() => {
+                    if (audioCtxRef.current) audioCtxRef.current.suspend();
+                }, 500);
+            }
+        }
+
+        return () => {
+            if (audioCtxRef.current) {
+                oscillatorsRef.current.forEach(osc => osc.stop());
+                audioCtxRef.current.close();
+                audioCtxRef.current = null;
+                oscillatorsRef.current = [];
+            }
+        };
+    }, [isPlaying]);
+};
+
 // --- CINEMATIC VISUALIZER ---
 
 const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
@@ -84,21 +148,17 @@ const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
         const promptText = `cinematic shot of ${keywords}, bible scene, epic lighting, 8k, ultra realistic`;
         const encodedPrompt = encodeURIComponent(promptText);
         
-        // Use a consistent random seed for this specific mount instance
-        // This prevents the URL from changing on every frame render
+        // Use a consistent random seed
         const seed = Math.floor(Math.random() * 1000);
         
         return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&nologo=true&seed=${bookName}_${seed}`;
-    }, [bookName]); // Only regenerate if the book changes
+    }, [bookName]); 
 
     // 3. Ken Burns Effect (Slow Pan & Zoom)
     useFrame((state, delta) => {
         if (isPlaying && imageRef.current) {
-            // Slow zoom in
             imageRef.current.scale.x = THREE.MathUtils.lerp(imageRef.current.scale.x, 1.15, delta * 0.02);
             imageRef.current.scale.y = THREE.MathUtils.lerp(imageRef.current.scale.y, 1.15, delta * 0.02);
-            
-            // Subtle pan
             imageRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.05) * 0.2;
         }
     });
@@ -108,13 +168,11 @@ const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
              <DreiImage 
                 ref={imageRef}
                 url={imageUrl}
-                scale={[12, 7]} // 16:9 Aspect Ratio roughly
+                scale={[12, 7]} 
                 position={[0, 0, -2]}
                 transparent
                 opacity={0.9}
              />
-             
-             {/* Atmosphere Overlay */}
              <Sparkles count={150} scale={12} size={3} speed={0.2} opacity={0.3} color="#fff" />
         </group>
     );
@@ -127,7 +185,9 @@ const PlayerOverlay = ({ content, onClose }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [sceneData, setSceneData] = useState(null);
     const [progress, setProgress] = useState(0);
-    const audioRef = useRef(null);
+    
+    // Use the procedural drone hook (Replaces broken <audio> tags)
+    useAtmosphericDrone(isPlaying && !isLoading);
 
     // 1. DATA FETCHING
     useEffect(() => {
@@ -138,23 +198,9 @@ const PlayerOverlay = ({ content, onClose }) => {
         });
     }, [content]);
 
-    // 2. AUDIO & PROGRESS
+    // 2. PROGRESS HANDLING
     useEffect(() => {
         let interval;
-        if (audioRef.current) {
-            // Attempt playback if ready
-            if(isPlaying && !isLoading) {
-                const playPromise = audioRef.current.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.warn("Auto-play prevented or audio blocked:", error);
-                    });
-                }
-            } else {
-                audioRef.current.pause();
-            }
-        }
-        
         if(isPlaying && !isLoading) {
             interval = setInterval(() => {
                 setProgress(p => (p >= 100 ? 100 : p + 0.1));
@@ -168,18 +214,6 @@ const PlayerOverlay = ({ content, onClose }) => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black flex flex-col"
         >
-            {/* AUDIO PLAYER */}
-            {sceneData && (
-                <audio 
-                    ref={audioRef}
-                    // FIXED: Using reliable Archive.org URL for ambient drone to avoid 403 errors
-                    src={sceneData.audioUrl || "https://archive.org/download/ambient-soundscapes/01%20Ambient%20Drone.mp3"} 
-                    loop 
-                    volume={0.5}
-                    onError={(e) => console.warn("Audio load error:", e)}
-                />
-            )}
-
             <div className="flex-grow relative bg-black overflow-hidden">
                 {/* 3D Canvas - The Movie Screen */}
                 <div className="absolute inset-0">
@@ -190,17 +224,17 @@ const PlayerOverlay = ({ content, onClose }) => {
 
                 {/* CINEMATIC POST-PROCESSING OVERLAYS */}
                 
-                {/* 1. Letterboxing (The Black Bars) */}
+                {/* 1. Letterboxing */}
                 <div className="absolute top-0 left-0 w-full h-[12%] bg-black z-10"></div>
                 <div className="absolute bottom-0 left-0 w-full h-[12%] bg-black z-10"></div>
 
-                {/* 2. Film Grain / Noise */}
-                <div className="absolute inset-0 opacity-[0.08] pointer-events-none z-[5]" style={{ backgroundImage: 'url("https://upload.wikimedia.org/wikipedia/commons/7/76/Noise_pattern_with_cross-sections.png")' }}></div>
+                {/* 2. Film Grain / Noise (Data URI Fixed) */}
+                <div className="absolute inset-0 opacity-[0.08] pointer-events-none z-[5]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
 
                 {/* 3. Vignette */}
                 <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-black/60 pointer-events-none z-[5]"></div>
 
-                {/* TITLE SEQUENCE (Centered) */}
+                {/* TITLE SEQUENCE */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
                      <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
@@ -215,7 +249,7 @@ const PlayerOverlay = ({ content, onClose }) => {
                      </motion.div>
                 </div>
 
-                {/* SUMMARY SUBTITLES (Bottom) */}
+                {/* SUMMARY SUBTITLES */}
                 {!isLoading && sceneData && (
                     <div className="absolute bottom-[15%] w-full flex justify-center z-20 px-10">
                         <motion.p 
@@ -235,12 +269,12 @@ const PlayerOverlay = ({ content, onClose }) => {
                 </button>
             </div>
 
-            {/* PROGRESS BAR (Integrated into Letterbox) */}
+            {/* PROGRESS BAR */}
             <div className="absolute bottom-0 w-full z-30 h-1.5 bg-gray-900 cursor-pointer">
                 <div className="h-full bg-red-700 shadow-[0_0_15px_red]" style={{ width: `${progress}%` }}></div>
             </div>
             
-            {/* CONTROLS (Minimalist) */}
+            {/* CONTROLS */}
             <div className="absolute bottom-6 left-6 z-30 flex items-center gap-4">
                  <button onClick={() => setIsPlaying(!isPlaying)} className="text-white/80 hover:text-white hover:scale-110 transition">
                     {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
@@ -256,14 +290,11 @@ const PlayerOverlay = ({ content, onClose }) => {
 const BookCard = ({ book, theme, onClick }) => (
     <div onClick={onClick} className="group relative aspect-[2/3] bg-zinc-900 rounded-sm overflow-hidden cursor-pointer border border-zinc-900 hover:border-zinc-700 transition-all shadow-xl">
         <div className={`absolute inset-0 opacity-60 bg-gradient-to-t ${theme === 'law' ? 'from-amber-900' : theme === 'gospel' ? 'from-blue-900' : theme === 'prophecy' ? 'from-red-900' : theme === 'revelation' ? 'from-purple-900' : 'from-gray-800'} to-black via-black/50`}></div>
-        
-        {/* Cinematic Poster Design */}
         <div className="absolute inset-0 flex flex-col justify-end p-6 z-10">
             <h3 className="text-2xl font-serif text-white tracking-tight group-hover:text-red-500 transition-colors duration-500">{book.n}</h3>
             <div className="w-8 h-px bg-white/30 my-2 group-hover:w-full transition-all duration-500"></div>
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{book.c} Chapters</span>
         </div>
-
         <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition duration-500"></div>
     </div>
 );
