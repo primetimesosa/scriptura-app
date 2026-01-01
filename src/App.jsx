@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial, Image as DreiImage } from '@react-three/drei';
+import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial, Image as DreiImage, Preload } from '@react-three/drei';
 import * as THREE from 'three';
 import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2, AlertCircle, Clapperboard, Film } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v5.0 - "The Episodic Engine"
+ * Scriptura Player v5.1 - "The Episodic Engine" (Optimized)
  * - Feature: Sequential Storytelling (Cycles through Wide, Detail, and Action shots)
  * - Feature: Multi-Plane Parallax (Background, Midground, Foreground layers)
  * - Feature: Procedural Audio Synthesis (Drone/Pad)
- * - Visuals: Film Grain, Vignette, and Letterboxing for Cinematic look
+ * - Fixed: Black screen on load (Added Suspense & Fallback layers)
+ * - Optimization: Reduced generation resolution for faster load times
  */
 
 // --- DATA ---
@@ -45,7 +46,7 @@ const BIBLE_STRUCTURE = [
   ]}
 ];
 
-// --- AWS CONNECTION (Simulated for Demo Reliability) ---
+// --- AWS CONNECTION ---
 const fetchSceneData = async (book, chapter) => {
     const API_URL = "https://1alqvhm1da.execute-api.us-east-1.amazonaws.com/prod/scene"; 
     try {
@@ -112,6 +113,34 @@ const useAtmosphericDrone = (isPlaying) => {
     }, [isPlaying]);
 };
 
+// --- SCENE LOADER COMPONENT ---
+const SceneLoader = () => {
+    const mesh = useRef();
+    useFrame((state, delta) => {
+        if(mesh.current) {
+            mesh.current.rotation.x += delta;
+            mesh.current.rotation.y += delta;
+        }
+    });
+    return (
+        <group>
+            <mesh ref={mesh}>
+                <octahedronGeometry args={[1, 0]} />
+                <meshStandardMaterial color="white" wireframe />
+            </mesh>
+            <Text 
+                position={[0, -1.5, 0]} 
+                fontSize={0.2} 
+                color="white"
+                anchorX="center" 
+                anchorY="middle"
+            >
+                GENERATING SCENE...
+            </Text>
+        </group>
+    );
+};
+
 // --- MULTI-PLANE ANIMATION ENGINE ---
 
 const CinematicLayer = ({ url, depth, speed, scale, opacity = 1, blending = THREE.NormalBlending }) => {
@@ -152,27 +181,28 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
         const keywords = getKeywords();
         const seed = Math.floor(Math.random() * 9999);
 
-        // Define 3 Distinct Shots for the "Episode"
+        // Optimization: Reduced to 1280x720 for faster load times (was 1920x1080)
+        const RES = "width=1280&height=720";
+
         return [
             {
                 type: 'ESTABLISHING',
-                bg: `https://image.pollinations.ai/prompt/wide%20cinematic%20landscape%20shot%20of%20${encodeURIComponent(keywords)},%20epic%20sky,%20horizon,%208k,%20matte%20painting?width=1920&height=1080&nologo=true&seed=${seed}_1`,
-                fg: `https://image.pollinations.ai/prompt/subtle%20fog%20overlay,%20mist,%20transparent%20background?width=1920&height=1080&nologo=true&seed=${seed}_fog`
+                bg: `https://image.pollinations.ai/prompt/wide%20cinematic%20landscape%20shot%20of%20${encodeURIComponent(keywords)},%20epic%20sky,%20horizon,%208k,%20matte%20painting?${RES}&nologo=true&seed=${seed}_1`,
+                fg: `https://image.pollinations.ai/prompt/subtle%20fog%20overlay,%20mist,%20transparent%20background?${RES}&nologo=true&seed=${seed}_fog`
             },
             {
                 type: 'DETAIL',
-                bg: `https://image.pollinations.ai/prompt/close%20up%20macro%20shot%20of%20${encodeURIComponent(keywords)},%20intricate%20texture,%20dramatic%20lighting,%20depth%20of%20field?width=1920&height=1080&nologo=true&seed=${seed}_2`,
-                fg: `https://image.pollinations.ai/prompt/floating%20dust%20particles,%20light%20rays,%20sparkles,%20black%20background?width=1920&height=1080&nologo=true&seed=${seed}_dust`
+                bg: `https://image.pollinations.ai/prompt/close%20up%20macro%20shot%20of%20${encodeURIComponent(keywords)},%20intricate%20texture,%20dramatic%20lighting,%20depth%20of%20field?${RES}&nologo=true&seed=${seed}_2`,
+                fg: `https://image.pollinations.ai/prompt/floating%20dust%20particles,%20light%20rays,%20sparkles,%20black%20background?${RES}&nologo=true&seed=${seed}_dust`
             },
             {
                 type: 'ACTION',
-                bg: `https://image.pollinations.ai/prompt/dynamic%20action%20angle%20of%20${encodeURIComponent(keywords)},%20motion%20blur,%20cinematic%20orange%20and%20teal,%20volumetric%20lighting?width=1920&height=1080&nologo=true&seed=${seed}_3`,
-                fg: `https://image.pollinations.ai/prompt/lens%20flare%20overlay,%20bokeh,%20transparent?width=1920&height=1080&nologo=true&seed=${seed}_flare`
+                bg: `https://image.pollinations.ai/prompt/dynamic%20action%20angle%20of%20${encodeURIComponent(keywords)},%20motion%20blur,%20cinematic%20orange%20and%20teal,%20volumetric%20lighting?${RES}&nologo=true&seed=${seed}_3`,
+                fg: `https://image.pollinations.ai/prompt/lens%20flare%20overlay,%20bokeh,%20transparent?${RES}&nologo=true&seed=${seed}_flare`
             }
         ];
     }, [bookName]);
 
-    // Sequence Timer (Change shot every 12 seconds)
     useEffect(() => {
         if (!isPlaying) return;
         const interval = setInterval(() => {
@@ -181,20 +211,21 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
         return () => clearInterval(interval);
     }, [isPlaying, shots.length]);
 
-    // Camera Rig (The "Ken Burns" + Shake)
     useFrame((state, delta) => {
         if (!isPlaying) return;
-        
-        // Gentle float
         camera.position.z = THREE.MathUtils.lerp(camera.position.z, 5 + (Math.sin(state.clock.elapsedTime * 0.1)), delta);
-        
-        // Shot Transition Effect (Subtle Zoom based on shot index)
-        const targetZoom = 5 - (shotIndex * 0.5); // Zoom in slightly for later shots
+        const targetZoom = 5 - (shotIndex * 0.5); 
         camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZoom, delta * 0.5);
     });
 
     return (
         <group>
+            {/* 0. Fallback Background (Prevents black screen while loading) */}
+            <mesh position={[0,0,-10]}>
+                <planeGeometry args={[50, 30]} />
+                <meshBasicMaterial color="#050505" />
+            </mesh>
+
             {/* Background Layer (The Set) */}
             <CinematicLayer 
                 url={shots[shotIndex].bg} 
@@ -211,7 +242,7 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
                     speed={0.5} 
                     scale={[16, 9]} 
                     opacity={0.6}
-                    blending={THREE.AdditiveBlending} // Makes black transparent effectively
+                    blending={THREE.AdditiveBlending} 
                 />
             </group>
 
@@ -259,7 +290,10 @@ const PlayerOverlay = ({ content, onClose }) => {
                 {/* 3D Canvas - The Cinema Screen */}
                 <div className="absolute inset-0">
                     <Canvas camera={{ position: [0, 0, 6], fov: 35 }}>
-                        <EpisodicDirector isPlaying={isPlaying} bookName={content.book} />
+                        <Suspense fallback={<SceneLoader />}>
+                            <EpisodicDirector isPlaying={isPlaying} bookName={content.book} />
+                            <Preload all />
+                        </Suspense>
                     </Canvas>
                 </div>
 
