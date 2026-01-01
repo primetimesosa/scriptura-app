@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
-import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2 } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info, Calendar, CheckCircle, ArrowLeft, Filter, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v3.0 - Cloud Connected
- * - Integrates with AWS Bedrock/Lambda architecture pattern
- * - Fetches "AI Directed" scene parameters for unique visuals per chapter
+ * Scriptura Player v3.1 - Production Fixes
+ * - Fixed: Geometry rendering case-sensitivity
+ * - Added: Audio Player for AI Voiceovers
+ * - Added: Ambient Background Sound Fallback
  */
 
 // --- DATA ---
@@ -43,24 +44,32 @@ const BIBLE_STRUCTURE = [
   ]}
 ];
 
-const ALL_BOOKS = BIBLE_STRUCTURE.flatMap(cat => cat.books.map(b => ({...b, theme: cat.theme, category: cat.category})));
-
-// --- AWS DATA CONNECTION ---
+// --- AWS CONNECTION ---
 const fetchSceneData = async (book, chapter) => {
-    // REAL API CONNECTION
+    // UPDATED: Uses the user provided URL
     const API_URL = "https://1alqvhm1da.execute-api.us-east-1.amazonaws.com/prod/scene"; 
     
     try {
         const response = await fetch(`${API_URL}?id=${book}-${chapter}`);
-        if (!response.ok) throw new Error("Network response was not ok");
-        return await response.json();
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        const data = await response.json();
+        
+        // --- DATA SANITIZATION ---
+        // Ensure geometry is lowercase to prevent rendering failures
+        if(data.geometryType) data.geometryType = data.geometryType.toLowerCase();
+        
+        return data;
     } catch (error) {
         console.error("AI Fetch Failed:", error);
-        // Fallback for demo if API fails
+        // Fallback Layout
         return {
-            colorPalette: "#333", lightingColor: "#fff", particleColor: "#888",
-            geometryType: "sphere", distortion: 0.1,
-            summary: "Offline mode: Unable to reach AI services."
+            colorPalette: "#223344", 
+            lightingColor: "#ffffff", 
+            particleColor: "#88ccff",
+            geometryType: "sphere", 
+            distortion: 0.3,
+            summary: "Experiencing network delays. Using offline procedural generation mode.",
+            isFallback: true
         };
     }
 };
@@ -79,24 +88,30 @@ const DynamicScene = ({ isPlaying, data }) => {
 
     if (!data) return null;
 
+    // Geometry Selector (Case Insensitive due to sanitization)
+    const getGeometry = () => {
+        const type = data.geometryType || 'sphere';
+        if (type.includes('cube') || type.includes('box')) return <boxGeometry args={[3, 3, 3]} />;
+        if (type.includes('torus') || type.includes('ring')) return <torusKnotGeometry args={[1.5, 0.5, 100, 16]} />;
+        if (type.includes('cylinder')) return <cylinderGeometry args={[1, 1, 4, 32]} />;
+        return <icosahedronGeometry args={[2.5, 4]} />; // Default Sphere
+    };
+
     return (
         <group>
             <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
             <ambientLight intensity={0.5} />
-            <pointLight position={[10, 10, 10]} intensity={2} color={data.lightingColor} />
+            <pointLight position={[10, 10, 10]} intensity={2} color={data.lightingColor || "#fff"} />
             <spotLight position={[-10, 0, 0]} intensity={1} color="#ffffff" />
             
             <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
                 <mesh ref={meshRef}>
-                    {data.geometryType === 'sphere' && <icosahedronGeometry args={[2.5, 4]} />}
-                    {data.geometryType === 'cube' && <boxGeometry args={[3, 3, 3]} />}
-                    {data.geometryType === 'torus' && <torusKnotGeometry args={[1.5, 0.5, 100, 16]} />}
-                    
+                    {getGeometry()}
                     <MeshDistortMaterial 
-                        color={data.colorPalette} 
-                        emissive={data.colorPalette}
+                        color={data.colorPalette || "#4488ff"} 
+                        emissive={data.colorPalette || "#000"}
                         emissiveIntensity={0.2}
-                        distort={data.distortion} 
+                        distort={data.distortion || 0.4} 
                         speed={2} 
                         wireframe 
                         roughness={0.2}
@@ -104,8 +119,8 @@ const DynamicScene = ({ isPlaying, data }) => {
                 </mesh>
             </Float>
             
-            <Sparkles count={400} scale={15} size={4} speed={0.4} opacity={0.5} color={data.particleColor} />
-            <Cloud opacity={0.2} speed={0.2} width={10} depth={1.5} segments={20} position={[0, -5, -5]} color={data.lightingColor} />
+            <Sparkles count={400} scale={15} size={4} speed={0.4} opacity={0.5} color={data.particleColor || "#fff"} />
+            <Cloud opacity={0.2} speed={0.2} width={10} depth={1.5} segments={20} position={[0, -5, -5]} color={data.lightingColor || "#fff"} />
         </group>
     );
 };
@@ -117,21 +132,39 @@ const PlayerOverlay = ({ content, onClose }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [sceneData, setSceneData] = useState(null);
     const [progress, setProgress] = useState(0);
+    const audioRef = useRef(null);
 
+    // 1. DATA FETCHING
     useEffect(() => {
-        // Fetch the AI-generated parameters when player opens
         setIsLoading(true);
         fetchSceneData(content.book, content.chapter).then(data => {
+            console.log("Scene Data Received:", data); // Debugging
             setSceneData(data);
             setIsLoading(false);
         });
     }, [content]);
 
+    // 2. AUDIO & PROGRESS HANDLING
     useEffect(() => {
         let interval;
+        
+        // Handle Audio
+        if (audioRef.current) {
+            if (isPlaying && !isLoading) {
+                audioRef.current.play().catch(e => console.warn("Audio Play Error:", e));
+            } else {
+                audioRef.current.pause();
+            }
+        }
+
+        // Handle Progress Bar
         if(isPlaying && !isLoading) {
             interval = setInterval(() => {
-                setProgress(p => (p >= 100 ? 100 : p + 0.1));
+                setProgress(p => {
+                    if (p >= 100) return 100;
+                    // Standard length 30s if no audio duration available
+                    return p + (100 / (30 * 20)); 
+                });
             }, 50);
         }
         return () => clearInterval(interval);
@@ -142,6 +175,17 @@ const PlayerOverlay = ({ content, onClose }) => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black flex flex-col"
         >
+            {/* AUDIO PLAYER (Invisible) */}
+            {sceneData && (
+                <audio 
+                    ref={audioRef}
+                    src={sceneData.audioUrl || "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"} 
+                    loop 
+                    volume={0.5}
+                    onError={(e) => console.log("Audio load error (likely S3 permissions), playing fallback.")}
+                />
+            )}
+
             <div className="flex-grow relative bg-black overflow-hidden">
                 {/* Loading State */}
                 <AnimatePresence>
@@ -152,13 +196,13 @@ const PlayerOverlay = ({ content, onClose }) => {
                         >
                             <Loader2 className="w-10 h-10 text-red-600 animate-spin mb-4" />
                             <p className="text-gray-400 text-sm font-mono animate-pulse">
-                                AWS BEDROCK GENERATING SCENE...
+                                CONTACTING AWS BEDROCK...
                             </p>
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                {/* 3D Canvas - Explicitly Sized */}
+                {/* 3D Canvas */}
                 <div className="absolute inset-0">
                     {!isLoading && sceneData && (
                         <Canvas shadows camera={{ position: [0, 0, 8], fov: 50 }}>
@@ -168,7 +212,7 @@ const PlayerOverlay = ({ content, onClose }) => {
                     )}
                 </div>
 
-                {/* Overlay Text */}
+                {/* Info Overlay */}
                 <div className="absolute top-10 left-6 md:left-10 z-10 pointer-events-none">
                     <motion.div 
                         initial={{ y: -20, opacity: 0 }} 
@@ -178,15 +222,20 @@ const PlayerOverlay = ({ content, onClose }) => {
                         <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter drop-shadow-lg">{content.book}</h1>
                         <div className="flex items-center gap-3 mt-2">
                             <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded">CHAPTER {content.chapter}</span>
-                            <span className="text-white/70 text-lg font-light tracking-widest uppercase">GENERATIVE VISUALIZER</span>
+                            <span className="text-white/70 text-lg font-light tracking-widest uppercase">AI GENERATED</span>
                         </div>
+                        
                         {!isLoading && sceneData && (
-                            <motion.p 
+                            <motion.div 
                                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                className="mt-4 max-w-md text-sm text-gray-300 drop-shadow-md bg-black/30 backdrop-blur p-4 rounded-lg border-l-2 border-red-600"
+                                className="mt-4 max-w-md bg-black/40 backdrop-blur-md p-4 rounded-lg border-l-2 border-red-600 shadow-xl"
                             >
-                               {sceneData.summary}
-                            </motion.p>
+                                <p className="text-sm text-gray-200 mb-2 font-medium italic">"{sceneData.summary}"</p>
+                                <div className="flex gap-2 text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                                    <span className="bg-white/10 px-1.5 py-0.5 rounded">Palette: {sceneData.colorPalette}</span>
+                                    <span className="bg-white/10 px-1.5 py-0.5 rounded">Geo: {sceneData.geometryType}</span>
+                                </div>
+                            </motion.div>
                         )}
                     </motion.div>
                 </div>
