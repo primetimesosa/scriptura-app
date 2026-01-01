@@ -1,500 +1,356 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Play, Info, ChevronLeft, ChevronRight, X, Menu, Search, Clock, BookOpen, SkipForward, SkipBack, Pause, Volume2, Settings, Share2, Plus, Calendar } from 'lucide-react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center } from '@react-three/drei';
+import * as THREE from 'three';
+import { Play, Pause, Square, SkipBack, SkipForward, Layers, Settings, Share2, Download, Plus, Wand2, Film, Type, Music, Palette, ChevronRight, ChevronDown, MonitorPlay } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura - Bible in a Year Visual Playlist
- * * UPDATED LOGIC:
- * - Generates a 365-day reading plan covering all 1,189 chapters.
- * - Organizes content into 12 "Months" (Seasons).
- * - Each "Episode" is a daily reading block (approx 3-4 chapters).
+ * Scriptura Studio - Production Grade Bible Animation Engine
+ * Uses React Three Fiber for real-time 3D scene generation.
  */
 
-// --- Data Generation Helpers ---
+// --- 3D SCENE COMPONENTS ---
 
-const BIBLE_BOOKS = [
-  { n: 'Genesis', c: 50, color: 'bg-emerald-700' }, { n: 'Exodus', c: 40, color: 'bg-amber-600' }, { n: 'Leviticus', c: 27, color: 'bg-stone-600' },
-  { n: 'Numbers', c: 36, color: 'bg-yellow-700' }, { n: 'Deuteronomy', c: 34, color: 'bg-orange-700' }, { n: 'Joshua', c: 24, color: 'bg-orange-800' },
-  { n: 'Judges', c: 21, color: 'bg-stone-700' }, { n: 'Ruth', c: 4, color: 'bg-pink-700' }, { n: '1 Samuel', c: 31, color: 'bg-indigo-700' },
-  { n: '2 Samuel', c: 24, color: 'bg-indigo-800' }, { n: '1 Kings', c: 22, color: 'bg-red-700' }, { n: '2 Kings', c: 25, color: 'bg-red-800' },
-  { n: '1 Chronicles', c: 29, color: 'bg-slate-600' }, { n: '2 Chronicles', c: 36, color: 'bg-slate-700' }, { n: 'Ezra', c: 10, color: 'bg-zinc-600' },
-  { n: 'Nehemiah', c: 13, color: 'bg-zinc-700' }, { n: 'Esther', c: 10, color: 'bg-rose-600' }, { n: 'Job', c: 42, color: 'bg-slate-800' },
-  { n: 'Psalms', c: 150, color: 'bg-blue-600' }, { n: 'Proverbs', c: 31, color: 'bg-amber-500' }, { n: 'Ecclesiastes', c: 12, color: 'bg-stone-500' },
-  { n: 'Song of Solomon', c: 8, color: 'bg-pink-500' }, { n: 'Isaiah', c: 66, color: 'bg-purple-800' }, { n: 'Jeremiah', c: 52, color: 'bg-purple-900' },
-  { n: 'Lamentations', c: 5, color: 'bg-gray-700' }, { n: 'Ezekiel', c: 48, color: 'bg-orange-900' }, { n: 'Daniel', c: 12, color: 'bg-cyan-800' },
-  { n: 'Hosea', c: 14, color: 'bg-teal-700' }, { n: 'Joel', c: 3, color: 'bg-teal-600' }, { n: 'Amos', c: 9, color: 'bg-teal-800' },
-  { n: 'Obadiah', c: 1, color: 'bg-teal-900' }, { n: 'Jonah', c: 4, color: 'bg-blue-500' }, { n: 'Micah', c: 7, color: 'bg-cyan-600' },
-  { n: 'Nahum', c: 3, color: 'bg-cyan-700' }, { n: 'Habakkuk', c: 3, color: 'bg-cyan-800' }, { n: 'Zephaniah', c: 3, color: 'bg-cyan-900' },
-  { n: 'Haggai', c: 2, color: 'bg-sky-700' }, { n: 'Zechariah', c: 14, color: 'bg-sky-800' }, { n: 'Malachi', c: 4, color: 'bg-sky-900' },
-  { n: 'Matthew', c: 28, color: 'bg-emerald-600' }, { n: 'Mark', c: 16, color: 'bg-red-950' }, { n: 'Luke', c: 24, color: 'bg-blue-900' },
-  { n: 'John', c: 21, color: 'bg-stone-800' }, { n: 'Acts', c: 28, color: 'bg-orange-600' }, { n: 'Romans', c: 16, color: 'bg-yellow-800' },
-  { n: '1 Corinthians', c: 16, color: 'bg-yellow-600' }, { n: '2 Corinthians', c: 13, color: 'bg-yellow-700' }, { n: 'Galatians', c: 6, color: 'bg-lime-700' },
-  { n: 'Ephesians', c: 6, color: 'bg-lime-800' }, { n: 'Philippians', c: 4, color: 'bg-lime-900' }, { n: 'Colossians', c: 4, color: 'bg-green-700' },
-  { n: '1 Thessalonians', c: 5, color: 'bg-green-800' }, { n: '2 Thessalonians', c: 3, color: 'bg-green-900' }, { n: '1 Timothy', c: 6, color: 'bg-emerald-800' },
-  { n: '2 Timothy', c: 4, color: 'bg-emerald-900' }, { n: 'Titus', c: 3, color: 'bg-teal-800' }, { n: 'Philemon', c: 1, color: 'bg-teal-900' },
-  { n: 'Hebrews', c: 13, color: 'bg-indigo-600' }, { n: 'James', c: 5, color: 'bg-indigo-800' }, { n: '1 Peter', c: 5, color: 'bg-blue-700' },
-  { n: '2 Peter', c: 3, color: 'bg-blue-800' }, { n: '1 John', c: 5, color: 'bg-blue-900' }, { n: '2 John', c: 1, color: 'bg-sky-800' },
-  { n: '3 John', c: 1, color: 'bg-sky-900' }, { n: 'Jude', c: 1, color: 'bg-purple-800' }, { n: 'Revelation', c: 22, color: 'bg-indigo-950' }
-];
-
-const MONTH_NAMES = [
-  "January - Beginnings", "February - The Law & Land", "March - Rise of Judges", 
-  "April - The Kingdom United", "May - The Kingdom Divided", "June - Exile & Return",
-  "July - Songs & Wisdom", "August - The Prophets Call", "September - The Messiah",
-  "October - The Early Church", "November - Letters to Churches", "December - Revelation"
-];
-
-const MONTH_COLORS = [
-  'from-emerald-900 to-green-900', 'from-amber-900 to-orange-900', 'from-stone-800 to-red-900',
-  'from-indigo-900 to-blue-900', 'from-red-900 to-rose-900', 'from-zinc-800 to-slate-900',
-  'from-blue-900 to-sky-900', 'from-purple-900 to-fuchsia-900', 'from-emerald-900 to-teal-900',
-  'from-orange-900 to-amber-900', 'from-yellow-900 to-lime-900', 'from-slate-900 to-black'
-];
-
-// Generates the 365 day plan
-const generateYearlyPlan = () => {
-  const months = [];
-  let dayCounter = 1;
-  let currentBookIndex = 0;
-  let currentChapter = 1;
-
-  for (let m = 0; m < 12; m++) {
-    const monthData = {
-      id: `month-${m + 1}`,
-      title: MONTH_NAMES[m],
-      description: `Reading plan for Month ${m + 1}.`,
-      color: MONTH_COLORS[m],
-      episodes: []
-    };
-
-    // Approx 30 days per month for simplicity in UI
-    const daysInMonth = m === 1 ? 28 : 30; // Simplified calendar
-
-    for (let d = 0; d < daysInMonth; d++) {
-      let chaptersForToday = [];
-      let dailyThumbnailColor = 'bg-gray-800';
-      
-      // Assign roughly 3.3 chapters per day (1189 / 365)
-      // We'll target 3 chapters minimum, catching up if we fall behind
-      const targetChapterCount = 3; 
-      
-      for(let i=0; i < targetChapterCount; i++) {
-        if (currentBookIndex >= BIBLE_BOOKS.length) break;
-
-        const book = BIBLE_BOOKS[currentBookIndex];
-        dailyThumbnailColor = book.color; // Use the color of the last book in the reading
-        
-        chaptersForToday.push(`${book.n} ${currentChapter}`);
-        
-        if (currentChapter < book.c) {
-          currentChapter++;
-        } else {
-          currentBookIndex++;
-          currentChapter = 1;
-        }
-      }
-
-      if (chaptersForToday.length > 0) {
-        // Format title nicely (e.g., "Genesis 1-3" or "Gen 50, Ex 1-2")
-        const firstRef = chaptersForToday[0];
-        const lastRef = chaptersForToday[chaptersForToday.length - 1];
-        
-        // Simple title formatter
-        let title = chaptersForToday.length === 1 ? firstRef : `${firstRef.split(' ')[0]} ${firstRef.split(' ')[1]} - ${lastRef.split(' ')[1]}`;
-        // Handle cross-book readings roughly
-        if(chaptersForToday.some(c => c.startsWith(BIBLE_BOOKS[currentBookIndex]?.n || 'ZZZ'))) {
-             title = `${firstRef} - ${lastRef}`;
-        }
-
-        monthData.episodes.push({
-          id: `day-${dayCounter}`,
-          dayNumber: dayCounter,
-          title: title, // e.g. "Genesis 1-3"
-          duration: `${10 + Math.floor(Math.random() * 10)} min`, // Simulated read time
-          description: `Day ${dayCounter} of the annual journey. Reading from ${chaptersForToday[0].split(' ')[0]}.`,
-          thumbnailColor: dailyThumbnailColor,
-          fullReadings: chaptersForToday
-        });
-        dayCounter++;
-      }
+const GenesisScene = ({ isPlaying }) => {
+  const meshRef = useRef();
+  
+  useFrame((state, delta) => {
+    if (isPlaying && meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.1;
+      meshRef.current.rotation.x += delta * 0.05;
     }
-    months.push(monthData);
-  }
-  return months;
-};
+  });
 
-// --- Components ---
-
-const Navbar = ({ activeTab, setActiveTab }) => (
-  <nav className="fixed top-0 w-full z-50 bg-gradient-to-b from-black/90 to-transparent px-4 py-4 flex items-center justify-between transition-all duration-300">
-    <div className="flex items-center gap-8">
-      <div className="text-red-600 font-bold text-3xl tracking-tighter cursor-pointer" onClick={() => setActiveTab('home')}>
-        SCRIPTURA
-      </div>
-      <div className="hidden md:flex gap-6 text-sm font-medium text-gray-300">
-        <button onClick={() => setActiveTab('home')} className={`hover:text-white transition ${activeTab === 'home' ? 'text-white font-bold' : ''}`}>Home</button>
-        <button className="hover:text-white transition">Reading Plan</button>
-        <button className="hover:text-white transition">Audio Bible</button>
-        <button className="hover:text-white transition">My Progress</button>
-      </div>
-    </div>
-    <div className="flex items-center gap-4 text-white">
-      <Search className="w-5 h-5 cursor-pointer hover:text-gray-300" />
-      <div className="w-8 h-8 rounded bg-red-800 flex items-center justify-center font-bold text-xs">J</div>
-    </div>
-  </nav>
-);
-
-const Hero = ({ featured, onPlay }) => {
   return (
-    <div className="relative h-[70vh] w-full flex items-center">
-      {/* Dynamic Background based on featured item */}
-      <div className={`absolute inset-0 bg-gradient-to-r ${featured.color} opacity-60`}></div>
-      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent"></div>
-      
-      {/* Abstract Content Background (Simulated Video) */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
-        <div className="w-full h-full bg-black/50 animate-pulse-slow">
-             <div className="w-full h-full flex items-center justify-center opacity-20">
-                <BookOpen size={200} />
-             </div>
-        </div>
-      </div>
-
-      <div className="relative z-10 px-4 md:px-12 max-w-2xl mt-16">
-        <div className="flex items-center gap-2 text-red-500 font-bold tracking-widest text-sm mb-4">
-          <span className="bg-red-600 text-white px-2 py-0.5 text-xs rounded-sm">TODAY'S READING</span>
-          <span>DAY 1</span>
-        </div>
-        <h1 className="text-5xl md:text-7xl font-bold text-white mb-4 leading-tight drop-shadow-lg">
-          The Beginning
-        </h1>
-        <p className="text-lg text-gray-200 mb-8 drop-shadow-md line-clamp-3">
-          Start your 365-day journey through the entire Bible. Today we witness the creation of the heavens and the earth, and the dawn of humanity.
-        </p>
-        <div className="flex gap-4">
-          <button 
-            onClick={() => onPlay(featured, featured.episodes[0])}
-            className="bg-white text-black px-6 py-2.5 rounded font-bold flex items-center gap-2 hover:bg-gray-200 transition"
-          >
-            <Play className="fill-black w-5 h-5" /> Start Day 1
-          </button>
-          <button className="bg-gray-500/30 backdrop-blur-sm text-white px-6 py-2.5 rounded font-bold flex items-center gap-2 hover:bg-gray-500/50 transition">
-            <Info className="w-5 h-5" /> View Plan
-          </button>
-        </div>
-      </div>
-    </div>
+    <group>
+      <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
+        <mesh ref={meshRef}>
+          <icosahedronGeometry args={[2, 16]} />
+          <meshStandardMaterial 
+            color="#223355" 
+            wireframe 
+            emissive="#112244" 
+            emissiveIntensity={2} 
+            roughness={0.1}
+            metalness={0.8}
+          />
+        </mesh>
+      </Float>
+      <Sparkles count={200} scale={10} size={4} speed={0.4} opacity={0.5} color="#44aaff" />
+      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      <pointLight position={[10, 10, 10]} intensity={2} color="#4488ff" />
+      <ambientLight intensity={0.5} />
+    </group>
   );
 };
 
-const EpisodeCard = ({ episode, onClick, sectionColor }) => (
-  <div 
-    onClick={onClick}
-    className="flex-none w-64 md:w-72 cursor-pointer group relative transition-transform duration-300 hover:scale-105 hover:z-20"
-  >
-    <div className={`aspect-video rounded-md overflow-hidden relative shadow-lg ${episode.thumbnailColor}`}>
-      {/* Thumbnail Content Placeholder */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-50 group-hover:opacity-30 transition-opacity">
-         <div className="text-4xl font-black text-white/30">DAY {episode.dayNumber}</div>
-      </div>
+const ExodusScene = ({ isPlaying }) => {
+  const wavesRef = useRef();
+
+  useFrame((state, delta) => {
+    if (isPlaying && wavesRef.current) {
+       wavesRef.current.position.z = Math.sin(state.clock.elapsedTime) * 0.5;
+    }
+  });
+
+  return (
+    <group>
+      <ambientLight intensity={0.2} />
+      <spotLight position={[10, 20, 10]} angle={0.3} penumbra={1} intensity={2} color="#ffaa00" />
+      <fog attach="fog" args={['#202025', 5, 20]} />
       
-      {/* Duration Badge */}
-      <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-xs text-gray-300 font-medium flex items-center gap-1">
-        <Clock className="w-3 h-3" /> {episode.duration}
-      </div>
+      {/* Left Wall of Water */}
+      <mesh position={[-4, 0, 0]} rotation={[0, 0, -0.2]}>
+        <boxGeometry args={[2, 10, 20]} />
+        <meshStandardMaterial color="#004488" transparent opacity={0.8} roughness={0.1} />
+      </mesh>
+      
+      {/* Right Wall of Water */}
+      <mesh position={[4, 0, 0]} rotation={[0, 0, 0.2]}>
+        <boxGeometry args={[2, 10, 20]} />
+        <meshStandardMaterial color="#004488" transparent opacity={0.8} roughness={0.1} />
+      </mesh>
 
-      {/* Play Overlay */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/40">
-        <div className="bg-white/90 rounded-full p-3">
-          <Play className="w-6 h-6 fill-black text-black ml-1" />
-        </div>
-      </div>
-    </div>
+      {/* Dry Ground */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
+        <planeGeometry args={[10, 50]} />
+        <meshStandardMaterial color="#dcb159" roughness={0.8} />
+      </mesh>
 
-    <div className="mt-2 px-1">
-      <h3 className="text-white font-medium text-sm group-hover:text-red-500 transition-colors truncate">{episode.title}</h3>
-      <p className="text-gray-400 text-xs mt-0.5 line-clamp-2">{episode.description}</p>
+      <Sparkles count={50} scale={12} size={6} speed={0.4} opacity={0.2} color="#ffffff" position={[0, 2, 0]} />
+    </group>
+  );
+};
+
+const GospelsScene = ({ isPlaying }) => {
+    const crossRef = useRef();
+    
+    useFrame((state, delta) => {
+        if(isPlaying && crossRef.current) {
+            // subtle breathing effect
+        }
+    });
+
+    return (
+        <group>
+            <ambientLight intensity={0.5} />
+            <directionalLight position={[0, 5, 10]} intensity={1} color="#ffddaa" />
+            <Cloud opacity={0.5} speed={0.4} width={10} depth={1.5} segments={20} position={[0, 5, -5]} />
+            
+            <mesh ref={crossRef} position={[0, 0, 0]}>
+                <boxGeometry args={[0.5, 6, 0.5]} />
+                <meshStandardMaterial color="#5c4033" roughness={0.9} />
+            </mesh>
+            <mesh position={[0, 1.5, 0]}>
+                <boxGeometry args={[4, 0.5, 0.5]} />
+                <meshStandardMaterial color="#5c4033" roughness={0.9} />
+            </mesh>
+            
+            <mesh position={[0, -3, 0]} rotation={[-Math.PI/2, 0, 0]}>
+                <circleGeometry args={[5, 32]} />
+                <meshStandardMaterial color="#334422" roughness={1} />
+            </mesh>
+        </group>
+    )
+}
+
+// --- UI COMPONENTS ---
+
+const ToolbarItem = ({ icon: Icon, label, active, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`flex flex-col items-center gap-1 p-3 rounded-lg transition-all duration-200 ${active ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-zinc-800 hover:text-white'}`}
+  >
+    <Icon className="w-5 h-5" />
+    <span className="text-[10px] uppercase font-bold tracking-wider">{label}</span>
+  </button>
+);
+
+const TimelineTrack = ({ label, color, width }) => (
+  <div className="flex items-center gap-2 mb-2 group cursor-pointer">
+    <div className="w-24 text-xs font-medium text-gray-500 text-right pr-2 group-hover:text-white">{label}</div>
+    <div className="flex-grow bg-zinc-800 h-8 rounded relative overflow-hidden">
+      <div className={`absolute top-1 bottom-1 left-0 rounded ${color} opacity-80`} style={{ width: width }}></div>
     </div>
   </div>
 );
 
-const SectionRow = ({ section, onPlayEpisode }) => {
-  const scrollRef = useRef(null);
+// --- MAIN APP ---
 
-  const scroll = (direction) => {
-    if (scrollRef.current) {
-      const { current } = scrollRef;
-      const scrollAmount = direction === 'left' ? -300 : 300;
-      current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
-  };
-
-  return (
-    <div className="mb-12 relative group/row">
-      <h2 className="text-xl md:text-2xl font-bold text-white mb-4 px-4 md:px-12 flex items-center gap-2">
-        {section.title}
-        <ChevronRight className="w-5 h-5 text-gray-500 group-hover/row:text-white transition-colors cursor-pointer" />
-      </h2>
-      
-      <div className="relative">
-        {/* Left Arrow */}
-        <button 
-          onClick={() => scroll('left')}
-          className="absolute left-0 top-0 bottom-0 z-40 bg-black/50 w-12 flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity hover:bg-black/70"
-        >
-          <ChevronLeft className="w-8 h-8 text-white" />
-        </button>
-
-        {/* Cards Container */}
-        <div 
-          ref={scrollRef}
-          className="flex gap-4 overflow-x-auto px-4 md:px-12 scrollbar-hide pb-4 snap-x"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {section.episodes.map((ep) => (
-            <EpisodeCard 
-              key={ep.id} 
-              episode={ep} 
-              sectionColor={section.color}
-              onClick={() => onPlayEpisode(section, ep)} 
-            />
-          ))}
-        </div>
-
-        {/* Right Arrow */}
-        <button 
-          onClick={() => scroll('right')}
-          className="absolute right-0 top-0 bottom-0 z-40 bg-black/50 w-12 flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity hover:bg-black/70"
-        >
-          <ChevronRight className="w-8 h-8 text-white" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const VideoPlayer = ({ section, episode, onClose, onNext }) => {
+export default function App() {
+  const [activeTab, setActiveTab] = useState('editor');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [showControls, setShowControls] = useState(true);
-  const [muted, setMuted] = useState(false);
-  
-  // Auto-hide controls simulation
-  useEffect(() => {
-    let timeout;
-    if (isPlaying) {
-      timeout = setTimeout(() => setShowControls(false), 3000);
-    }
-    return () => clearTimeout(timeout);
-  }, [isPlaying, showControls]);
+  const [activeScene, setActiveScene] = useState('genesis');
+  const [timelineTime, setTimelineTime] = useState(0);
+  const [showRenderModal, setShowRenderModal] = useState(false);
 
-  // Simulate video progress
+  // Timeline simulation
   useEffect(() => {
     let interval;
-    if (isPlaying && progress < 100) {
+    if (isPlaying) {
       interval = setInterval(() => {
-        setProgress(p => (p >= 100 ? 100 : p + 0.1));
+        setTimelineTime(prev => (prev + 1) % 100);
       }, 100);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, progress]);
+  }, [isPlaying]);
+
+  const togglePlay = () => setIsPlaying(!isPlaying);
+
+  const scenes = [
+    { id: 'genesis', label: 'Genesis: Creation', color: 'bg-blue-600' },
+    { id: 'exodus', label: 'Exodus: Red Sea', color: 'bg-orange-500' },
+    { id: 'gospels', label: 'Gospels: The Cross', color: 'bg-red-600' },
+  ];
 
   return (
-    <div 
-      className="fixed inset-0 z-50 bg-black flex flex-col"
-      onMouseMove={() => setShowControls(true)}
-      onMouseLeave={() => isPlaying && setShowControls(false)}
-    >
-      {/* Video Area Placeholder */}
-      <div className={`flex-grow relative flex items-center justify-center bg-gradient-to-br ${section.color}`}>
-        {/* Placeholder Visuals */}
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="text-center z-10 p-8">
-            <div className="text-red-500 font-bold tracking-widest mb-2">DAY {episode.dayNumber}</div>
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4 tracking-wider animate-pulse">{episode.title}</h1>
-            <p className="text-xl text-white/80 italic">{section.title}</p>
+    <div className="h-screen w-screen bg-zinc-950 text-white flex flex-col overflow-hidden font-sans">
+      
+      {/* HEADER */}
+      <header className="h-14 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900 z-50">
+        <div className="flex items-center gap-4">
+          <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold text-lg shadow-lg shadow-red-900/50">S</div>
+          <h1 className="font-bold text-lg tracking-tight">Scriptura <span className="text-zinc-500 font-normal">Studio</span></h1>
+          <div className="h-6 w-px bg-zinc-700 mx-2"></div>
+          <div className="flex items-center gap-2 text-sm text-gray-300 bg-zinc-800 px-3 py-1 rounded hover:bg-zinc-700 cursor-pointer transition">
+            <span>Project:</span>
+            <span className="font-medium text-white">The Beginning (Gen 1)</span>
+            <ChevronDown className="w-3 h-3" />
+          </div>
         </div>
 
-        {/* Controls Overlay */}
-        <div className={`absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent transition-opacity duration-300 flex flex-col justify-between p-6 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-          
-          {/* Top Bar */}
-          <div className="flex justify-between items-start">
-             <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition"><ChevronLeft className="w-8 h-8 text-white" /></button>
-             <button className="p-2 hover:bg-white/20 rounded-full transition"><Settings className="w-6 h-6 text-white" /></button>
-          </div>
+        <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500 mr-2">Auto-saved 2m ago</span>
+          <button className="bg-white text-black px-4 py-1.5 rounded-sm font-bold text-sm hover:bg-gray-200 transition flex items-center gap-2">
+            <Share2 className="w-4 h-4" /> Share
+          </button>
+          <button 
+            onClick={() => setShowRenderModal(true)}
+            className="bg-red-600 text-white px-4 py-1.5 rounded-sm font-bold text-sm hover:bg-red-500 transition flex items-center gap-2 shadow-lg shadow-red-900/20"
+          >
+            <Download className="w-4 h-4" /> Export Video
+          </button>
+        </div>
+      </header>
 
-          {/* Bottom Controls */}
-          <div className="w-full max-w-5xl mx-auto space-y-4">
-            {/* Progress Bar */}
-            <div className="w-full h-1.5 bg-gray-600 rounded cursor-pointer group" onClick={(e) => {
-                // Simple seek simulation
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percent = (x / rect.width) * 100;
-                setProgress(percent);
-            }}>
-              <div 
-                className="h-full bg-red-600 rounded relative" 
-                style={{ width: `${progress}%` }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full scale-0 group-hover:scale-100 transition-transform shadow-lg border-2 border-white"></div>
+      {/* MAIN WORKSPACE */}
+      <div className="flex-grow flex overflow-hidden">
+        
+        {/* LEFT SIDEBAR: TOOLS */}
+        <div className="w-20 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-4 gap-2 z-40">
+          <ToolbarItem icon={Wand2} label="Script" active={false} />
+          <ToolbarItem icon={Film} label="Scenes" active={true} />
+          <ToolbarItem icon={Type} label="Text" active={false} />
+          <ToolbarItem icon={Music} label="Audio" active={false} />
+          <ToolbarItem icon={Palette} label="Style" active={false} />
+        </div>
+
+        {/* MIDDLE: VIEWPORT */}
+        <div className="flex-grow flex flex-col relative bg-zinc-950">
+           {/* Scene Selector Overlay */}
+           <div className="absolute top-4 left-4 z-10 flex gap-2">
+              {scenes.map(scene => (
+                  <button 
+                    key={scene.id}
+                    onClick={() => setActiveScene(scene.id)}
+                    className={`px-3 py-1 text-xs font-bold rounded backdrop-blur-md border border-white/10 transition ${activeScene === scene.id ? 'bg-red-600 text-white' : 'bg-black/50 text-gray-300 hover:bg-black/80'}`}
+                  >
+                      {scene.label}
+                  </button>
+              ))}
+           </div>
+
+           {/* 3D CANVAS */}
+           <div className="flex-grow relative">
+             <Canvas shadows camera={{ position: [0, 2, 10], fov: 45 }}>
+               <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
+               {activeScene === 'genesis' && <GenesisScene isPlaying={isPlaying} />}
+               {activeScene === 'exodus' && <ExodusScene isPlaying={isPlaying} />}
+               {activeScene === 'gospels' && <GospelsScene isPlaying={isPlaying} />}
+             </Canvas>
+
+             {/* Playback Overlay Controls (On Canvas) */}
+             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900/90 backdrop-blur border border-zinc-700 rounded-full px-6 py-2 flex items-center gap-6 shadow-2xl">
+                 <button className="text-gray-400 hover:text-white"><SkipBack className="w-5 h-5" /></button>
+                 <button 
+                    onClick={togglePlay}
+                    className="w-10 h-10 bg-white rounded-full flex items-center justify-center hover:scale-105 transition active:scale-95"
+                 >
+                     {isPlaying ? <Pause className="w-5 h-5 text-black fill-black" /> : <Play className="w-5 h-5 text-black fill-black ml-1" />}
+                 </button>
+                 <button className="text-gray-400 hover:text-white"><SkipForward className="w-5 h-5" /></button>
+             </div>
+           </div>
+
+           {/* BOTTOM: TIMELINE */}
+           <div className="h-64 bg-zinc-900 border-t border-zinc-800 flex flex-col z-30">
+              <div className="h-8 border-b border-zinc-800 bg-zinc-900 flex items-center px-4 justify-between">
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                      <span className="hover:text-white cursor-pointer">00:00</span>
+                      <span className="hover:text-white cursor-pointer">00:15</span>
+                      <span className="hover:text-white cursor-pointer">00:30</span>
+                      <span className="hover:text-white cursor-pointer">00:45</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-gray-500 hover:text-white cursor-pointer" />
+                  </div>
               </div>
-            </div>
+              <div className="flex-grow p-4 overflow-y-auto">
+                  <TimelineTrack label="Scene" color="bg-indigo-600" width="100%" />
+                  <TimelineTrack label="Camera" color="bg-purple-600" width="45%" />
+                  <TimelineTrack label="Text Overlay" color="bg-blue-500" width="30%" />
+                  <TimelineTrack label="Voiceover" color="bg-emerald-600" width="80%" />
+                  <TimelineTrack label="Music" color="bg-rose-600" width="100%" />
+              </div>
+           </div>
+        </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <button onClick={() => setIsPlaying(!isPlaying)} className="text-white hover:text-red-500 transition">
-                  {isPlaying ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current" />}
-                </button>
-                <button className="text-white hover:text-gray-300 transition">
-                  <SkipBack className="w-6 h-6 fill-current" />
-                </button>
-                <button onClick={onNext} className="text-white hover:text-gray-300 transition">
-                  <SkipForward className="w-6 h-6 fill-current" />
-                </button>
-                <div className="flex items-center gap-2 group/vol">
-                    <button onClick={() => setMuted(!muted)} className="text-white">
-                        <Volume2 className={`w-6 h-6 ${muted ? 'text-gray-500' : ''}`} />
-                    </button>
-                    <div className="w-0 overflow-hidden group-hover/vol:w-24 transition-all duration-300">
-                        <div className="h-1 bg-white/50 w-20 ml-2 rounded-full"></div>
+        {/* RIGHT SIDEBAR: PROPERTIES */}
+        <div className="w-72 bg-zinc-900 border-l border-zinc-800 flex flex-col overflow-y-auto z-40">
+           <div className="p-4 border-b border-zinc-800">
+               <h2 className="font-bold text-sm text-gray-200">Scene Properties</h2>
+           </div>
+           
+           {/* Generative AI Controls Mockup */}
+           <div className="p-4 space-y-6">
+               <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">Generative Prompt</label>
+                   <textarea 
+                      className="w-full bg-black/30 border border-zinc-700 rounded p-3 text-sm text-gray-200 focus:outline-none focus:border-red-600 transition h-24 resize-none"
+                      placeholder="Describe the scene atmosphere..."
+                      defaultValue="A void of deep blue darkness, sparkling with the first light of creation. Ethereal, cinematic, 8k resolution."
+                   ></textarea>
+                   <button className="w-full bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold py-2 rounded border border-zinc-700 flex items-center justify-center gap-2">
+                       <Wand2 className="w-3 h-3 text-purple-400" /> Generate Variations
+                   </button>
+               </div>
+
+               <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">Style Preset</label>
+                   <div className="grid grid-cols-2 gap-2">
+                       <div className="bg-zinc-800 p-2 rounded border border-red-600 cursor-pointer">
+                           <div className="h-12 bg-gradient-to-br from-blue-900 to-black rounded mb-1"></div>
+                           <div className="text-[10px] text-center font-medium">Cinematic</div>
+                       </div>
+                       <div className="bg-zinc-800 p-2 rounded border border-zinc-700 hover:border-zinc-500 cursor-pointer opacity-50">
+                           <div className="h-12 bg-amber-100 rounded mb-1"></div>
+                           <div className="text-[10px] text-center font-medium">Watercolor</div>
+                       </div>
+                   </div>
+               </div>
+
+               <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">Lighting</label>
+                   <input type="range" className="w-full accent-red-600" />
+                   <div className="flex justify-between text-[10px] text-gray-500">
+                       <span>Dark</span>
+                       <span>Bright</span>
+                   </div>
+               </div>
+           </div>
+        </div>
+
+      </div>
+
+      {/* RENDER MODAL */}
+      <AnimatePresence>
+        {showRenderModal && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
+                <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full shadow-2xl"
+                >
+                    <h2 className="text-2xl font-bold mb-2">Rendering Video</h2>
+                    <p className="text-gray-400 text-sm mb-6">Compiling shaders, baking lighting, and generating MP4 stream...</p>
+                    
+                    <div className="w-full bg-black rounded-full h-2 mb-2 overflow-hidden">
+                        <motion.div 
+                            className="h-full bg-gradient-to-r from-red-600 to-purple-600"
+                            initial={{ width: "0%" }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 3, ease: "easeInOut" }}
+                        ></motion.div>
                     </div>
-                </div>
-                <span className="text-white text-sm font-medium">
-                    {Math.floor((progress/100) * 15)}:{(Math.floor((progress/100) * 60) % 60).toString().padStart(2, '0')} / {episode.duration}
-                </span>
-              </div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-8">
+                        <span>Encoding frames...</span>
+                        <span>1080p @ 60fps</span>
+                    </div>
 
-              <div className="flex items-center gap-4">
-                 <h3 className="text-white font-bold text-lg hidden md:block">{episode.title}</h3>
-                 <button className="text-white/70 hover:text-white"><Share2 className="w-5 h-5" /></button>
-                 <button className="text-white/70 hover:text-white"><Plus className="w-5 h-5" /></button>
-              </div>
+                    <div className="flex justify-end">
+                        <button 
+                            onClick={() => setShowRenderModal(false)}
+                            className="text-gray-400 hover:text-white text-sm font-bold"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </motion.div>
             </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Sidebar Playlist (Simulated) */}
-      <div className="hidden lg:block w-80 bg-zinc-900 border-l border-zinc-800 overflow-y-auto">
-        <div className="p-4 border-b border-zinc-800">
-            <h3 className="text-white font-bold">Up Next in {section.title}</h3>
-        </div>
-        {section.episodes.map(ep => (
-            <div key={ep.id} className={`p-4 flex gap-3 hover:bg-zinc-800 cursor-pointer ${ep.id === episode.id ? 'bg-zinc-800 border-l-4 border-red-600' : ''}`}>
-                <div className={`w-24 h-14 rounded flex-shrink-0 ${ep.thumbnailColor} opacity-80 flex items-center justify-center`}>
-                    <span className="text-xs font-bold text-white/50">DAY {ep.dayNumber}</span>
-                </div>
-                <div className="flex-grow min-w-0">
-                    <h4 className={`text-sm font-medium truncate ${ep.id === episode.id ? 'text-white' : 'text-gray-300'}`}>{ep.title}</h4>
-                    <p className="text-xs text-gray-500 mt-1">{ep.duration}</p>
-                </div>
-            </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const Footer = () => (
-  <footer className="w-full bg-zinc-950 py-16 px-4 md:px-12 text-gray-500 text-sm border-t border-zinc-900">
-    <div className="max-w-6xl mx-auto">
-        <div className="flex gap-4 mb-4">
-            <div className="w-6 h-6 bg-gray-700 rounded-sm"></div>
-            <div className="w-6 h-6 bg-gray-700 rounded-sm"></div>
-            <div className="w-6 h-6 bg-gray-700 rounded-sm"></div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 gap-y-8 mb-8">
-            <div className="flex flex-col gap-3">
-                <a href="#" className="hover:underline">Audio Description</a>
-                <a href="#" className="hover:underline">Investor Relations</a>
-                <a href="#" className="hover:underline">Legal Notices</a>
-            </div>
-            <div className="flex flex-col gap-3">
-                <a href="#" className="hover:underline">Help Center</a>
-                <a href="#" className="hover:underline">Jobs</a>
-                <a href="#" className="hover:underline">Cookie Preferences</a>
-            </div>
-            <div className="flex flex-col gap-3">
-                <a href="#" className="hover:underline">Gift Cards</a>
-                <a href="#" className="hover:underline">Terms of Use</a>
-                <a href="#" className="hover:underline">Corporate Information</a>
-            </div>
-            <div className="flex flex-col gap-3">
-                <a href="#" className="hover:underline">Media Center</a>
-                <a href="#" className="hover:underline">Privacy</a>
-                <a href="#" className="hover:underline">Contact Us</a>
-            </div>
-        </div>
-        <button className="border border-gray-500 px-4 py-1.5 hover:text-white transition mb-4">Service Code</button>
-        <p className="text-xs">&copy; 2024 Scriptura Inc.</p>
-    </div>
-  </footer>
-);
-
-export default function App() {
-  const [currentView, setCurrentView] = useState('home'); // 'home', 'player'
-  const [playingData, setPlayingData] = useState({ section: null, episode: null });
-  const [activeTab, setActiveTab] = useState('home');
-
-  // Memoize the plan generation so it's stable across renders
-  const yearlyPlan = useMemo(() => generateYearlyPlan(), []);
-
-  const handlePlay = (section, episode) => {
-    setPlayingData({ section, episode });
-    setCurrentView('player');
-  };
-
-  const handleClosePlayer = () => {
-    setCurrentView('home');
-    setPlayingData({ section: null, episode: null });
-  };
-
-  const handleNextEpisode = () => {
-      // Logic to find next episode
-      if(!playingData.section) return;
-      const currentIndex = playingData.section.episodes.findIndex(e => e.id === playingData.episode.id);
-      if(currentIndex < playingData.section.episodes.length - 1) {
-          setPlayingData({
-              ...playingData,
-              episode: playingData.section.episodes[currentIndex + 1]
-          });
-      }
-  };
-
-  // Feature Day 1 of Month 1
-  const featuredSection = yearlyPlan[0]; 
-
-  return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans selection:bg-red-600 selection:text-white">
-      
-      {currentView === 'home' && (
-        <>
-          <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
-          <Hero featured={featuredSection} onPlay={(sec, ep) => handlePlay(sec, ep)} />
-          
-          <div className="relative z-10 -mt-24 md:-mt-32 pb-10 space-y-4">
-             {yearlyPlan.map((section) => (
-               <SectionRow 
-                 key={section.id} 
-                 section={section} 
-                 onPlayEpisode={handlePlay} 
-               />
-             ))}
-          </div>
-          <Footer />
-        </>
-      )}
-
-      {currentView === 'player' && playingData.episode && (
-        <VideoPlayer 
-          section={playingData.section} 
-          episode={playingData.episode} 
-          onClose={handleClosePlayer}
-          onNext={handleNextEpisode}
-        />
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }
