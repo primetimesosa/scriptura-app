@@ -6,10 +6,10 @@ import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, M
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v4.0 - Hollywood Cinematic Edition
- * - Replaced "Geometry" with Photorealistic Cinematic Backdrops
- * - Added "Ken Burns" Camera movement (Slow Pan/Zoom)
- * - Added Film Grain, Vignette, and Letterboxing (2.35:1 Aspect Ratio)
+ * Scriptura Player v4.1 - Production Fixes
+ * - Fixed: 403 Forbidden on Audio (Replaced Pixabay with Archive.org)
+ * - Fixed: Image URL Encoding (Sanitized AI Prompts)
+ * - Feature: Cinematic "Ken Burns" Effect
  */
 
 // --- DATA ---
@@ -44,7 +44,7 @@ const BIBLE_STRUCTURE = [
   ]}
 ];
 
-// --- AWS CONNECTION (Simulated for this demo to focus on Visuals) ---
+// --- AWS CONNECTION ---
 const fetchSceneData = async (book, chapter) => {
     // REAL API CONNECTION
     const API_URL = "https://1alqvhm1da.execute-api.us-east-1.amazonaws.com/prod/scene"; 
@@ -77,20 +77,26 @@ const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
     };
 
     const keywords = getKeywords();
-    // Using a reliable placeholder service since Unsplash source is often rate limited.
-    // In production, this would be your AWS S3 bucket with generated images.
-    // We add a random seed to get different images for different chapters
-    const imageUrl = `https://image.pollinations.ai/prompt/cinematic%20shot%20of%20${keywords}%20bible%20scene%20epic%20lighting%208k%20ultra%20realistic?width=1920&height=1080&nologo=true&seed=${bookName}${Math.random()}`;
+    
+    // 2. SANITIZED PROMPT GENERATION
+    // Encode the prompt to handle commas, spaces, and special characters correctly
+    const promptText = `cinematic shot of ${keywords}, bible scene, epic lighting, 8k, ultra realistic`;
+    const encodedPrompt = encodeURIComponent(promptText);
+    
+    // Using Pollinations.ai with specific seed for consistency per chapter
+    // We add a random component to seed to ensure fresh variation on reload if needed, 
+    // or use fixed seed for persistence. Here we use book+random for demo.
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&nologo=true&seed=${bookName}_${Math.floor(Math.random() * 1000)}`;
 
-    // 2. Ken Burns Effect (Slow Pan & Zoom)
+    // 3. Ken Burns Effect (Slow Pan & Zoom)
     useFrame((state, delta) => {
         if (isPlaying && imageRef.current) {
             // Slow zoom in
-            imageRef.current.scale.x = THREE.MathUtils.lerp(imageRef.current.scale.x, 1.2, delta * 0.05);
-            imageRef.current.scale.y = THREE.MathUtils.lerp(imageRef.current.scale.y, 1.2, delta * 0.05);
+            imageRef.current.scale.x = THREE.MathUtils.lerp(imageRef.current.scale.x, 1.15, delta * 0.02);
+            imageRef.current.scale.y = THREE.MathUtils.lerp(imageRef.current.scale.y, 1.15, delta * 0.02);
             
             // Subtle pan
-            imageRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.1) * 0.2;
+            imageRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.05) * 0.2;
         }
     });
 
@@ -102,22 +108,14 @@ const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
                 scale={[12, 7]} // 16:9 Aspect Ratio roughly
                 position={[0, 0, -2]}
                 transparent
-                opacity={0.8}
+                opacity={0.9}
              />
              
              {/* Atmosphere Overlay */}
-             <Sparkles count={200} scale={12} size={2} speed={0.2} opacity={0.3} color="#fff" />
+             <Sparkles count={150} scale={12} size={3} speed={0.2} opacity={0.3} color="#fff" />
         </group>
     );
 };
-
-const CinematicText = ({ text, subtext }) => {
-    return (
-        <group position={[0, 0, 0]}>
-             {/* We use HTML overlay for crisp cinematic text instead of 3D text which can be jagged */}
-        </group>
-    )
-}
 
 // --- UI COMPONENTS ---
 
@@ -141,8 +139,19 @@ const PlayerOverlay = ({ content, onClose }) => {
     useEffect(() => {
         let interval;
         if (audioRef.current) {
-            isPlaying && !isLoading ? audioRef.current.play().catch(e=>{}) : audioRef.current.pause();
+            // Attempt playback if ready
+            if(isPlaying && !isLoading) {
+                const playPromise = audioRef.current.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.warn("Auto-play prevented or audio blocked:", error);
+                    });
+                }
+            } else {
+                audioRef.current.pause();
+            }
         }
+        
         if(isPlaying && !isLoading) {
             interval = setInterval(() => {
                 setProgress(p => (p >= 100 ? 100 : p + 0.1));
@@ -160,9 +169,11 @@ const PlayerOverlay = ({ content, onClose }) => {
             {sceneData && (
                 <audio 
                     ref={audioRef}
-                    src={sceneData.audioUrl || "https://cdn.pixabay.com/download/audio/2022/03/24/audio_03d69903b0.mp3"} // Cinematic Drone Sound
+                    // FIXED: Using reliable Archive.org URL for ambient drone to avoid 403 errors
+                    src={sceneData.audioUrl || "https://archive.org/download/ambient-soundscapes/01%20Ambient%20Drone.mp3"} 
                     loop 
-                    volume={0.6}
+                    volume={0.5}
+                    onError={(e) => console.warn("Audio load error:", e)}
                 />
             )}
 
@@ -312,101 +323,4 @@ export default function App() {
                             <div className="flex items-center gap-3 mb-4">
                                 <span className="text-red-600 text-[10px] font-bold tracking-[0.3em] uppercase border border-red-600 px-3 py-1">Featured Series</span>
                             </div>
-                            <h2 className="text-5xl md:text-8xl font-serif text-white mb-6 leading-[0.9] tracking-tighter">The<br/>Apocalypse</h2>
-                            <p className="text-gray-300 text-lg md:text-xl font-light leading-relaxed max-w-xl">
-                                A cinematic visual exploration of the Apostle John's vision. Experience the end of days through our new AI-driven render engine.
-                            </p>
-                            
-                            <div className="mt-8 flex items-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                                <span className="text-xs font-bold uppercase tracking-widest text-white/50">Click to Explore</span>
-                                <ArrowLeft className="w-4 h-4 text-white rotate-180" />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {filteredBooks.map((section, idx) => (
-                    <div key={idx}>
-                        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-4">
-                            <div className={`w-8 h-px ${section.color}`}></div>
-                            {section.category}
-                        </h2>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                            {section.books.map((book) => (
-                                <BookCard 
-                                    key={book.n} 
-                                    book={book} 
-                                    theme={section.theme}
-                                    onClick={() => openBook(book, section.theme)}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </motion.div>
-        )}
-
-        {/* VIEW: BOOK DETAIL */}
-        {view === 'bookDetail' && selectedBook && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <button 
-                    onClick={() => setView('browse')}
-                    className="flex items-center gap-2 text-gray-500 hover:text-white mb-8 transition uppercase text-xs font-bold tracking-widest"
-                >
-                    <ArrowLeft className="w-4 h-4" /> Return to Library
-                </button>
-
-                <div className="flex flex-col lg:flex-row gap-12 mb-12">
-                     <div className="w-full lg:w-1/3">
-                        <div className="aspect-[2/3] bg-zinc-900 rounded relative overflow-hidden shadow-2xl border border-white/5">
-                            <div className={`absolute inset-0 bg-gradient-to-br from-black via-transparent to-transparent z-10`}></div>
-                            <div className={`absolute inset-0 opacity-40 bg-gradient-to-t ${selectedBook.theme === 'law' ? 'from-amber-900' : 'from-blue-900'} to-gray-900`}></div>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-20">
-                                <h1 className="text-6xl font-serif tracking-tighter drop-shadow-2xl mb-2">{selectedBook.n}</h1>
-                                <div className="w-12 h-1 bg-red-600"></div>
-                            </div>
-                        </div>
-                     </div>
-                     
-                     <div className="flex-grow">
-                         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
-                            <div>
-                                <h2 className="text-3xl font-serif text-white">Select a Chapter</h2>
-                                <p className="text-gray-500 mt-2 font-light">Begin the cinematic visualizer.</p>
-                            </div>
-                         </div>
-                         
-                         <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-4">
-                             {Array.from({ length: selectedBook.c }).map((_, i) => {
-                                 const chapterNum = i + 1;
-                                 return (
-                                     <button 
-                                        key={i}
-                                        onClick={() => setSelectedContent({ book: selectedBook.n, chapter: chapterNum, theme: selectedBook.theme })}
-                                        className="aspect-square bg-white/5 hover:bg-red-900/40 border border-white/5 hover:border-red-600/50 transition-all duration-300 flex flex-col items-center justify-center group"
-                                     >
-                                         <span className="font-serif text-2xl text-gray-400 group-hover:text-white transition-colors">{chapterNum}</span>
-                                     </button>
-                                 )
-                             })}
-                         </div>
-                     </div>
-                </div>
-            </motion.div>
-        )}
-
-      </div>
-
-      {/* FULL SCREEN CINEMATIC PLAYER */}
-      <AnimatePresence>
-          {selectedContent && (
-              <PlayerOverlay 
-                content={selectedContent}
-                onClose={() => setSelectedContent(null)}
-              />
-          )}
-      </AnimatePresence>
-
-    </div>
-  );
-}
+                            <h2 className="text-5xl md:text-8xl
