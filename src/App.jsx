@@ -1,356 +1,426 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center } from '@react-three/drei';
+import { OrbitControls, Stars, Float, Sparkles, Cloud, Text3D, Center, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
-import { Play, Pause, Square, SkipBack, SkipForward, Layers, Settings, Share2, Download, Plus, Wand2, Film, Type, Music, Palette, ChevronRight, ChevronDown, MonitorPlay } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, Maximize, SkipBack, SkipForward, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Studio - Production Grade Bible Animation Engine
- * Uses React Three Fiber for real-time 3D scene generation.
+ * Scriptura Player - The "Hands-Off" Procedural Bible Experience
+ * * CONCEPT: 
+ * A streaming service where "videos" are generated in real-time using Three.js.
+ * Users simply browse books/chapters and "watch" the generated animated visualization.
+ * * THEMES:
+ * - Creation (Blue/Space)
+ * - Law/History (Gold/Sand/Stone)
+ * - Poetry (Green/Nature/Water)
+ * - Prophets (Red/Fire/Particle)
+ * - Gospels (White/Light/Ethereal)
+ * - Epistles (Paper/Ink/Structure)
+ * - Revelation (Purple/Cosmic/Jewel)
  */
 
-// --- 3D SCENE COMPONENTS ---
+// --- DATA ---
 
-const GenesisScene = ({ isPlaying }) => {
+const BIBLE_STRUCTURE = [
+  { category: 'The Pentateuch', color: 'bg-amber-600', theme: 'law', books: [
+      { n: 'Genesis', c: 50 }, { n: 'Exodus', c: 40 }, { n: 'Leviticus', c: 27 }, { n: 'Numbers', c: 36 }, { n: 'Deuteronomy', c: 34 }
+  ]},
+  { category: 'History', color: 'bg-stone-600', theme: 'history', books: [
+      { n: 'Joshua', c: 24 }, { n: 'Judges', c: 21 }, { n: 'Ruth', c: 4 }, { n: '1 Samuel', c: 31 }, { n: '2 Samuel', c: 24 },
+      { n: '1 Kings', c: 22 }, { n: '2 Kings', c: 25 }, { n: 'Ezra', c: 10 }, { n: 'Nehemiah', c: 13 }, { n: 'Esther', c: 10 }
+  ]},
+  { category: 'Poetry', color: 'bg-teal-700', theme: 'poetry', books: [
+      { n: 'Job', c: 42 }, { n: 'Psalms', c: 150 }, { n: 'Proverbs', c: 31 }, { n: 'Ecclesiastes', c: 12 }, { n: 'Song of Solomon', c: 8 }
+  ]},
+  { category: 'Major Prophets', color: 'bg-red-800', theme: 'prophecy', books: [
+      { n: 'Isaiah', c: 66 }, { n: 'Jeremiah', c: 52 }, { n: 'Lamentations', c: 5 }, { n: 'Ezekiel', c: 48 }, { n: 'Daniel', c: 12 }
+  ]},
+  { category: 'The Gospels', color: 'bg-blue-600', theme: 'gospel', books: [
+      { n: 'Matthew', c: 28 }, { n: 'Mark', c: 16 }, { n: 'Luke', c: 24 }, { n: 'John', c: 21 }
+  ]},
+  { category: 'Early Church', color: 'bg-orange-600', theme: 'gospel', books: [
+      { n: 'Acts', c: 28 }
+  ]},
+  { category: 'Epistles', color: 'bg-emerald-800', theme: 'epistle', books: [
+      { n: 'Romans', c: 16 }, { n: '1 Corinthians', c: 16 }, { n: 'Galatians', c: 6 }, { n: 'Ephesians', c: 6 }
+  ]},
+  { category: 'Apocalypse', color: 'bg-purple-900', theme: 'revelation', books: [
+      { n: 'Revelation', c: 22 }
+  ]}
+];
+
+// --- 3D VISUALIZERS ---
+
+// 1. COSMIC / CREATION THEME (Genesis)
+const CreationVisualizer = ({ isPlaying }) => {
   const meshRef = useRef();
-  
   useFrame((state, delta) => {
     if (isPlaying && meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.1;
-      meshRef.current.rotation.x += delta * 0.05;
+      meshRef.current.rotation.y += delta * 0.05;
+      meshRef.current.rotation.z += delta * 0.02;
     }
   });
 
   return (
     <group>
+      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
       <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
         <mesh ref={meshRef}>
-          <icosahedronGeometry args={[2, 16]} />
-          <meshStandardMaterial 
-            color="#223355" 
+          <icosahedronGeometry args={[2.5, 4]} />
+          <MeshDistortMaterial 
+            color="#224488" 
+            emissive="#112244"
+            distort={0.4} 
+            speed={2} 
             wireframe 
-            emissive="#112244" 
-            emissiveIntensity={2} 
-            roughness={0.1}
-            metalness={0.8}
+            roughness={0}
           />
         </mesh>
       </Float>
-      <Sparkles count={200} scale={10} size={4} speed={0.4} opacity={0.5} color="#44aaff" />
-      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      <Sparkles count={300} scale={12} size={3} speed={0.4} opacity={0.5} color="#88ccff" />
       <pointLight position={[10, 10, 10]} intensity={2} color="#4488ff" />
-      <ambientLight intensity={0.5} />
     </group>
   );
 };
 
-const ExodusScene = ({ isPlaying }) => {
-  const wavesRef = useRef();
-
-  useFrame((state, delta) => {
-    if (isPlaying && wavesRef.current) {
-       wavesRef.current.position.z = Math.sin(state.clock.elapsedTime) * 0.5;
+// 2. LAW / DESERT THEME (Exodus, Numbers)
+const LawVisualizer = ({ isPlaying }) => {
+  const groupRef = useRef();
+  useFrame((state) => {
+    if (isPlaying && groupRef.current) {
+        groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.1) * 0.2;
     }
   });
 
   return (
-    <group>
-      <ambientLight intensity={0.2} />
-      <spotLight position={[10, 20, 10]} angle={0.3} penumbra={1} intensity={2} color="#ffaa00" />
-      <fog attach="fog" args={['#202025', 5, 20]} />
+    <group ref={groupRef}>
+      <fog attach="fog" args={['#2a1b0a', 5, 30]} />
+      <ambientLight intensity={0.4} />
+      <spotLight position={[5, 10, 5]} intensity={2} color="#ffaa00" castShadow />
       
-      {/* Left Wall of Water */}
-      <mesh position={[-4, 0, 0]} rotation={[0, 0, -0.2]}>
-        <boxGeometry args={[2, 10, 20]} />
-        <meshStandardMaterial color="#004488" transparent opacity={0.8} roughness={0.1} />
-      </mesh>
+      {/* Golden Tablets Abstract */}
+      <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
+        <group>
+            <mesh position={[-0.8, 0, 0]}>
+                <boxGeometry args={[1.2, 2, 0.2]} />
+                <meshStandardMaterial color="#d4af37" roughness={0.3} metalness={0.8} />
+            </mesh>
+            <mesh position={[0.8, 0, 0]}>
+                <boxGeometry args={[1.2, 2, 0.2]} />
+                <meshStandardMaterial color="#d4af37" roughness={0.3} metalness={0.8} />
+            </mesh>
+        </group>
+      </Float>
       
-      {/* Right Wall of Water */}
-      <mesh position={[4, 0, 0]} rotation={[0, 0, 0.2]}>
-        <boxGeometry args={[2, 10, 20]} />
-        <meshStandardMaterial color="#004488" transparent opacity={0.8} roughness={0.1} />
+      {/* Floating Sand/Dust */}
+      <Sparkles count={500} scale={15} size={2} speed={0.2} opacity={0.6} color="#ffd700" />
+      
+      {/* Ground */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3, 0]}>
+        <planeGeometry args={[50, 50]} />
+        <meshStandardMaterial color="#3d2b1f" />
       </mesh>
-
-      {/* Dry Ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
-        <planeGeometry args={[10, 50]} />
-        <meshStandardMaterial color="#dcb159" roughness={0.8} />
-      </mesh>
-
-      <Sparkles count={50} scale={12} size={6} speed={0.4} opacity={0.2} color="#ffffff" position={[0, 2, 0]} />
     </group>
   );
 };
 
-const GospelsScene = ({ isPlaying }) => {
-    const crossRef = useRef();
-    
-    useFrame((state, delta) => {
-        if(isPlaying && crossRef.current) {
-            // subtle breathing effect
-        }
-    });
-
+// 3. POETRY / NATURE THEME (Psalms, Song of Solomon)
+const PoetryVisualizer = ({ isPlaying }) => {
     return (
         <group>
             <ambientLight intensity={0.5} />
-            <directionalLight position={[0, 5, 10]} intensity={1} color="#ffddaa" />
-            <Cloud opacity={0.5} speed={0.4} width={10} depth={1.5} segments={20} position={[0, 5, -5]} />
+            <pointLight position={[-5, 5, -5]} color="#00ff88" intensity={2} />
+            <fog attach="fog" args={['#051510', 0, 20]} />
             
-            <mesh ref={crossRef} position={[0, 0, 0]}>
-                <boxGeometry args={[0.5, 6, 0.5]} />
-                <meshStandardMaterial color="#5c4033" roughness={0.9} />
-            </mesh>
-            <mesh position={[0, 1.5, 0]}>
-                <boxGeometry args={[4, 0.5, 0.5]} />
-                <meshStandardMaterial color="#5c4033" roughness={0.9} />
-            </mesh>
+            <Cloud opacity={0.3} speed={0.2} width={10} depth={1.5} segments={20} position={[0, 0, -5]} color="#aaddcc" />
             
-            <mesh position={[0, -3, 0]} rotation={[-Math.PI/2, 0, 0]}>
-                <circleGeometry args={[5, 32]} />
-                <meshStandardMaterial color="#334422" roughness={1} />
-            </mesh>
+            <Float speed={1} rotationIntensity={1} floatIntensity={2}>
+                <mesh>
+                    <torusKnotGeometry args={[1.5, 0.4, 100, 16]} />
+                    <MeshDistortMaterial color="#00aa88" distort={0.6} speed={1} roughness={0.1} metalness={0.5} />
+                </mesh>
+            </Float>
+            
+            <Sparkles count={200} size={5} speed={0.5} opacity={0.4} color="#ccffdd" scale={10} />
         </group>
     )
 }
 
-// --- UI COMPONENTS ---
+// 4. PROPHETIC / FIRE THEME (Isaiah, Ezekiel)
+const ProphecyVisualizer = ({ isPlaying }) => {
+    return (
+        <group>
+            <ambientLight intensity={0.1} />
+            <pointLight position={[0, 0, 0]} color="#ff4400" intensity={3} distance={10} />
+            
+            <Float speed={5} rotationIntensity={2} floatIntensity={0}>
+                <mesh>
+                    <dodecahedronGeometry args={[1.5, 0]} />
+                    <meshStandardMaterial color="#550000" emissive="#ff2200" emissiveIntensity={2} wireframe />
+                </mesh>
+            </Float>
+            
+            {/* Chaotic Particles */}
+            <Sparkles count={1000} size={2} speed={2} opacity={0.8} color="#ffaa00" scale={12} noise={1} />
+        </group>
+    )
+}
 
-const ToolbarItem = ({ icon: Icon, label, active, onClick }) => (
-  <button 
-    onClick={onClick}
-    className={`flex flex-col items-center gap-1 p-3 rounded-lg transition-all duration-200 ${active ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-zinc-800 hover:text-white'}`}
-  >
-    <Icon className="w-5 h-5" />
-    <span className="text-[10px] uppercase font-bold tracking-wider">{label}</span>
-  </button>
-);
+// 5. GOSPEL / LIGHT THEME (Matthew, John)
+const GospelVisualizer = ({ isPlaying }) => {
+    return (
+        <group>
+            <ambientLight intensity={0.8} />
+            <directionalLight position={[0, 10, 5]} intensity={1.5} color="#fff" />
+            
+            <Float speed={1} rotationIntensity={0.1} floatIntensity={0.5}>
+                {/* The Cross Abstract */}
+                <group>
+                     <mesh position={[0, 0.5, 0]}>
+                         <boxGeometry args={[0.5, 4, 0.5]} />
+                         <meshStandardMaterial color="#f0f0f0" emissive="#ffffff" emissiveIntensity={0.2} />
+                     </mesh>
+                     <mesh position={[0, 1.5, 0]}>
+                         <boxGeometry args={[2.5, 0.5, 0.5]} />
+                         <meshStandardMaterial color="#f0f0f0" emissive="#ffffff" emissiveIntensity={0.2} />
+                     </mesh>
+                </group>
+            </Float>
+            
+            <Cloud opacity={0.6} speed={0.1} width={20} depth={5} segments={10} position={[0, -2, -5]} color="#ffffff" />
+            <Sparkles count={100} size={5} speed={0.2} opacity={0.5} color="#ffffff" scale={15} />
+        </group>
+    )
+}
 
-const TimelineTrack = ({ label, color, width }) => (
-  <div className="flex items-center gap-2 mb-2 group cursor-pointer">
-    <div className="w-24 text-xs font-medium text-gray-500 text-right pr-2 group-hover:text-white">{label}</div>
-    <div className="flex-grow bg-zinc-800 h-8 rounded relative overflow-hidden">
-      <div className={`absolute top-1 bottom-1 left-0 rounded ${color} opacity-80`} style={{ width: width }}></div>
+// 6. REVELATION / COSMIC THEME
+const RevelationVisualizer = ({ isPlaying }) => {
+    return (
+        <group>
+            <Stars radius={100} depth={50} count={5000} factor={4} saturation={1} fade speed={3} />
+            <ambientLight intensity={0.2} />
+            <pointLight position={[0, 0, 0]} color="#aa00ff" intensity={5} />
+            
+            <Float speed={2} rotationIntensity={1} floatIntensity={1}>
+                <mesh>
+                    <octahedronGeometry args={[2, 0]} />
+                    <MeshDistortMaterial color="#440088" emissive="#8800ff" distort={1} speed={3} wireframe />
+                </mesh>
+            </Float>
+             <Sparkles count={500} size={4} speed={1} opacity={0.8} color="#ff00ff" scale={15} />
+        </group>
+    )
+}
+
+// --- MAIN COMPONENTS ---
+
+const SceneManager = ({ theme, isPlaying }) => {
+    switch (theme) {
+        case 'law': return <LawVisualizer isPlaying={isPlaying} />;
+        case 'history': return <LawVisualizer isPlaying={isPlaying} />; // Reuse Law for now
+        case 'poetry': return <PoetryVisualizer isPlaying={isPlaying} />;
+        case 'prophecy': return <ProphecyVisualizer isPlaying={isPlaying} />;
+        case 'gospel': return <GospelVisualizer isPlaying={isPlaying} />;
+        case 'epistle': return <GospelVisualizer isPlaying={isPlaying} />; // Reuse Gospel
+        case 'revelation': return <RevelationVisualizer isPlaying={isPlaying} />;
+        default: return <CreationVisualizer isPlaying={isPlaying} />; // Default to creation
+    }
+}
+
+const PlayerOverlay = ({ book, chapter, theme, onClose }) => {
+    const [isPlaying, setIsPlaying] = useState(true);
+    const [progress, setProgress] = useState(0);
+
+    // Simulated progress
+    useEffect(() => {
+        let interval;
+        if(isPlaying) {
+            interval = setInterval(() => {
+                setProgress(p => (p >= 100 ? 0 : p + 0.1));
+            }, 50);
+        }
+        return () => clearInterval(interval);
+    }, [isPlaying]);
+
+    return (
+        <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black flex flex-col"
+        >
+            {/* 3D Viewport - The "Video" */}
+            <div className="flex-grow relative bg-black">
+                <Canvas shadows camera={{ position: [0, 0, 8], fov: 50 }}>
+                     <OrbitControls autoRotate={false} enableZoom={false} />
+                     <SceneManager theme={theme} isPlaying={isPlaying} />
+                </Canvas>
+
+                {/* Overlay Text */}
+                <div className="absolute top-10 left-10 z-10">
+                    <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter drop-shadow-lg">{book.n}</h1>
+                    <div className="flex items-center gap-3 mt-2">
+                        <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded">CHAPTER {chapter}</span>
+                        <span className="text-white/70 text-lg font-light tracking-widest uppercase">{theme}</span>
+                    </div>
+                </div>
+
+                {/* Close Button */}
+                <button onClick={onClose} className="absolute top-6 right-6 z-20 text-white/50 hover:text-white transition">
+                    <X className="w-10 h-10" />
+                </button>
+            </div>
+
+            {/* Controls Bar */}
+            <div className="h-24 bg-gradient-to-t from-black via-black/90 to-transparent absolute bottom-0 w-full px-8 pb-8 flex flex-col justify-end">
+                {/* Progress Bar */}
+                <div className="w-full h-1 bg-white/20 rounded mb-4 cursor-pointer overflow-hidden">
+                    <div className="h-full bg-red-600 relative" style={{ width: `${progress}%` }}>
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow"></div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <button onClick={() => setIsPlaying(!isPlaying)} className="hover:scale-110 transition">
+                            {isPlaying ? <Pause className="w-8 h-8 fill-white text-white" /> : <Play className="w-8 h-8 fill-white text-white" />}
+                        </button>
+                        <button className="text-white/70 hover:text-white"><SkipBack className="w-6 h-6" /></button>
+                        <button className="text-white/70 hover:text-white"><SkipForward className="w-6 h-6" /></button>
+                        <Volume2 className="w-6 h-6 text-white/70" />
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs text-white/50 font-mono">PROCESSED IN REAL-TIME</span>
+                        <Maximize className="w-5 h-5 text-white/70 hover:text-white cursor-pointer" />
+                    </div>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+const BookCard = ({ book, theme, onClick }) => (
+    <div onClick={onClick} className="group relative aspect-[3/4] bg-zinc-900 rounded-md overflow-hidden cursor-pointer hover:ring-2 hover:ring-white transition-all">
+        {/* Dynamic Abstract Cover based on theme */}
+        <div className={`absolute inset-0 opacity-50 bg-gradient-to-br ${theme === 'law' ? 'from-amber-900 to-black' : theme === 'gospel' ? 'from-blue-900 to-black' : theme === 'prophecy' ? 'from-red-900 to-black' : 'from-gray-800 to-black'}`}></div>
+        
+        {/* Text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+            <h3 className="text-xl font-black text-white tracking-tight group-hover:scale-110 transition-transform duration-300">{book.n}</h3>
+            <span className="text-xs text-gray-400 mt-1">{book.c} Chapters</span>
+        </div>
+        
+        {/* Play Icon on Hover */}
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="bg-red-600 rounded-full p-3 shadow-lg hover:scale-110 transition-transform">
+                <Play className="w-6 h-6 fill-white text-white ml-1" />
+            </div>
+        </div>
     </div>
-  </div>
 );
-
-// --- MAIN APP ---
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('editor');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [activeScene, setActiveScene] = useState('genesis');
-  const [timelineTime, setTimelineTime] = useState(0);
-  const [showRenderModal, setShowRenderModal] = useState(false);
+  const [selectedContent, setSelectedContent] = useState(null); // { book, chapter, theme }
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Timeline simulation
-  useEffect(() => {
-    let interval;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setTimelineTime(prev => (prev + 1) % 100);
-      }, 100);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying]);
-
-  const togglePlay = () => setIsPlaying(!isPlaying);
-
-  const scenes = [
-    { id: 'genesis', label: 'Genesis: Creation', color: 'bg-blue-600' },
-    { id: 'exodus', label: 'Exodus: Red Sea', color: 'bg-orange-500' },
-    { id: 'gospels', label: 'Gospels: The Cross', color: 'bg-red-600' },
-  ];
+  const handleBookClick = (book, theme) => {
+      // For simplicity, automatically starts Chapter 1. 
+      // In a full app, this would open a chapter select screen.
+      setSelectedContent({ book, chapter: 1, theme });
+  };
 
   return (
-    <div className="h-screen w-screen bg-zinc-950 text-white flex flex-col overflow-hidden font-sans">
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-red-900">
       
-      {/* HEADER */}
-      <header className="h-14 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900 z-50">
-        <div className="flex items-center gap-4">
-          <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold text-lg shadow-lg shadow-red-900/50">S</div>
-          <h1 className="font-bold text-lg tracking-tight">Scriptura <span className="text-zinc-500 font-normal">Studio</span></h1>
-          <div className="h-6 w-px bg-zinc-700 mx-2"></div>
-          <div className="flex items-center gap-2 text-sm text-gray-300 bg-zinc-800 px-3 py-1 rounded hover:bg-zinc-700 cursor-pointer transition">
-            <span>Project:</span>
-            <span className="font-medium text-white">The Beginning (Gen 1)</span>
-            <ChevronDown className="w-3 h-3" />
-          </div>
-        </div>
-
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-40 bg-gradient-to-b from-black/90 to-transparent px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500 mr-2">Auto-saved 2m ago</span>
-          <button className="bg-white text-black px-4 py-1.5 rounded-sm font-bold text-sm hover:bg-gray-200 transition flex items-center gap-2">
-            <Share2 className="w-4 h-4" /> Share
-          </button>
-          <button 
-            onClick={() => setShowRenderModal(true)}
-            className="bg-red-600 text-white px-4 py-1.5 rounded-sm font-bold text-sm hover:bg-red-500 transition flex items-center gap-2 shadow-lg shadow-red-900/20"
-          >
-            <Download className="w-4 h-4" /> Export Video
-          </button>
+            <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold text-lg shadow-red-900/50 shadow-lg">S</div>
+            <span className="font-bold text-xl tracking-tighter">Scriptura</span>
         </div>
-      </header>
-
-      {/* MAIN WORKSPACE */}
-      <div className="flex-grow flex overflow-hidden">
-        
-        {/* LEFT SIDEBAR: TOOLS */}
-        <div className="w-20 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-4 gap-2 z-40">
-          <ToolbarItem icon={Wand2} label="Script" active={false} />
-          <ToolbarItem icon={Film} label="Scenes" active={true} />
-          <ToolbarItem icon={Type} label="Text" active={false} />
-          <ToolbarItem icon={Music} label="Audio" active={false} />
-          <ToolbarItem icon={Palette} label="Style" active={false} />
+        <div className="flex items-center gap-6 text-sm font-medium text-gray-300">
+            <span className="text-white">Browse</span>
+            <span className="hover:text-white cursor-pointer">Series</span>
+            <span className="hover:text-white cursor-pointer">Themes</span>
         </div>
+        <div className="flex items-center gap-4">
+            <Search className="w-5 h-5 text-gray-400" />
+            <div className="w-8 h-8 rounded bg-zinc-800 border border-zinc-700"></div>
+        </div>
+      </nav>
 
-        {/* MIDDLE: VIEWPORT */}
-        <div className="flex-grow flex flex-col relative bg-zinc-950">
-           {/* Scene Selector Overlay */}
-           <div className="absolute top-4 left-4 z-10 flex gap-2">
-              {scenes.map(scene => (
-                  <button 
-                    key={scene.id}
-                    onClick={() => setActiveScene(scene.id)}
-                    className={`px-3 py-1 text-xs font-bold rounded backdrop-blur-md border border-white/10 transition ${activeScene === scene.id ? 'bg-red-600 text-white' : 'bg-black/50 text-gray-300 hover:bg-black/80'}`}
-                  >
-                      {scene.label}
-                  </button>
-              ))}
-           </div>
-
-           {/* 3D CANVAS */}
-           <div className="flex-grow relative">
-             <Canvas shadows camera={{ position: [0, 2, 10], fov: 45 }}>
-               <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
-               {activeScene === 'genesis' && <GenesisScene isPlaying={isPlaying} />}
-               {activeScene === 'exodus' && <ExodusScene isPlaying={isPlaying} />}
-               {activeScene === 'gospels' && <GospelsScene isPlaying={isPlaying} />}
+      {/* Hero Section */}
+      <div className="relative h-[60vh] w-full flex items-center justify-start px-6 md:px-16 overflow-hidden">
+          <div className="absolute inset-0 z-0">
+             {/* Background Canvas (Live) */}
+             <Canvas camera={{position: [0,0,5]}}>
+                 <Stars />
+                 <ambientLight intensity={0.5} />
+                 <Float speed={1} rotationIntensity={0.5} floatIntensity={0.5}>
+                    <mesh rotation={[0.5, 0.5, 0]}>
+                        <torusGeometry args={[3, 0.02, 16, 100]} />
+                        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+                    </mesh>
+                 </Float>
              </Canvas>
+             <div className="absolute inset-0 bg-gradient-to-r from-black via-black/50 to-transparent"></div>
+             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+          </div>
 
-             {/* Playback Overlay Controls (On Canvas) */}
-             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900/90 backdrop-blur border border-zinc-700 rounded-full px-6 py-2 flex items-center gap-6 shadow-2xl">
-                 <button className="text-gray-400 hover:text-white"><SkipBack className="w-5 h-5" /></button>
-                 <button 
-                    onClick={togglePlay}
-                    className="w-10 h-10 bg-white rounded-full flex items-center justify-center hover:scale-105 transition active:scale-95"
-                 >
-                     {isPlaying ? <Pause className="w-5 h-5 text-black fill-black" /> : <Play className="w-5 h-5 text-black fill-black ml-1" />}
-                 </button>
-                 <button className="text-gray-400 hover:text-white"><SkipForward className="w-5 h-5" /></button>
-             </div>
-           </div>
-
-           {/* BOTTOM: TIMELINE */}
-           <div className="h-64 bg-zinc-900 border-t border-zinc-800 flex flex-col z-30">
-              <div className="h-8 border-b border-zinc-800 bg-zinc-900 flex items-center px-4 justify-between">
-                  <div className="flex items-center gap-4 text-xs text-gray-400">
-                      <span className="hover:text-white cursor-pointer">00:00</span>
-                      <span className="hover:text-white cursor-pointer">00:15</span>
-                      <span className="hover:text-white cursor-pointer">00:30</span>
-                      <span className="hover:text-white cursor-pointer">00:45</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                      <Settings className="w-4 h-4 text-gray-500 hover:text-white cursor-pointer" />
-                  </div>
+          <div className="relative z-10 max-w-2xl mt-10">
+              <div className="flex items-center gap-2 text-red-500 font-bold text-xs tracking-widest mb-4">
+                  <span className="bg-white/10 px-2 py-1 rounded backdrop-blur">FEATURED</span>
+                  <span>THE BOOK OF REVELATION</span>
               </div>
-              <div className="flex-grow p-4 overflow-y-auto">
-                  <TimelineTrack label="Scene" color="bg-indigo-600" width="100%" />
-                  <TimelineTrack label="Camera" color="bg-purple-600" width="45%" />
-                  <TimelineTrack label="Text Overlay" color="bg-blue-500" width="30%" />
-                  <TimelineTrack label="Voiceover" color="bg-emerald-600" width="80%" />
-                  <TimelineTrack label="Music" color="bg-rose-600" width="100%" />
+              <h1 className="text-5xl md:text-7xl font-black mb-6 leading-none">The Alpha <br/>& The Omega.</h1>
+              <p className="text-lg text-gray-300 mb-8 max-w-lg">Experience the apocalyptic vision of John in a stunning, procedurally generated visual journey.</p>
+              <div className="flex gap-4">
+                  <button 
+                    onClick={() => handleBookClick({ n: 'Revelation', c: 22 }, 'revelation')}
+                    className="bg-white text-black px-8 py-3 rounded font-bold flex items-center gap-2 hover:bg-gray-200 transition"
+                  >
+                      <Play className="w-5 h-5 fill-black" /> Watch Now
+                  </button>
+                  <button className="bg-white/10 backdrop-blur text-white px-6 py-3 rounded font-bold flex items-center gap-2 hover:bg-white/20 transition">
+                      <Info className="w-5 h-5" /> More Info
+                  </button>
               </div>
-           </div>
-        </div>
-
-        {/* RIGHT SIDEBAR: PROPERTIES */}
-        <div className="w-72 bg-zinc-900 border-l border-zinc-800 flex flex-col overflow-y-auto z-40">
-           <div className="p-4 border-b border-zinc-800">
-               <h2 className="font-bold text-sm text-gray-200">Scene Properties</h2>
-           </div>
-           
-           {/* Generative AI Controls Mockup */}
-           <div className="p-4 space-y-6">
-               <div className="space-y-2">
-                   <label className="text-xs font-bold text-gray-500 uppercase">Generative Prompt</label>
-                   <textarea 
-                      className="w-full bg-black/30 border border-zinc-700 rounded p-3 text-sm text-gray-200 focus:outline-none focus:border-red-600 transition h-24 resize-none"
-                      placeholder="Describe the scene atmosphere..."
-                      defaultValue="A void of deep blue darkness, sparkling with the first light of creation. Ethereal, cinematic, 8k resolution."
-                   ></textarea>
-                   <button className="w-full bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold py-2 rounded border border-zinc-700 flex items-center justify-center gap-2">
-                       <Wand2 className="w-3 h-3 text-purple-400" /> Generate Variations
-                   </button>
-               </div>
-
-               <div className="space-y-2">
-                   <label className="text-xs font-bold text-gray-500 uppercase">Style Preset</label>
-                   <div className="grid grid-cols-2 gap-2">
-                       <div className="bg-zinc-800 p-2 rounded border border-red-600 cursor-pointer">
-                           <div className="h-12 bg-gradient-to-br from-blue-900 to-black rounded mb-1"></div>
-                           <div className="text-[10px] text-center font-medium">Cinematic</div>
-                       </div>
-                       <div className="bg-zinc-800 p-2 rounded border border-zinc-700 hover:border-zinc-500 cursor-pointer opacity-50">
-                           <div className="h-12 bg-amber-100 rounded mb-1"></div>
-                           <div className="text-[10px] text-center font-medium">Watercolor</div>
-                       </div>
-                   </div>
-               </div>
-
-               <div className="space-y-2">
-                   <label className="text-xs font-bold text-gray-500 uppercase">Lighting</label>
-                   <input type="range" className="w-full accent-red-600" />
-                   <div className="flex justify-between text-[10px] text-gray-500">
-                       <span>Dark</span>
-                       <span>Bright</span>
-                   </div>
-               </div>
-           </div>
-        </div>
-
+          </div>
       </div>
 
-      {/* RENDER MODAL */}
-      <AnimatePresence>
-        {showRenderModal && (
-            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
-                <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full shadow-2xl"
-                >
-                    <h2 className="text-2xl font-bold mb-2">Rendering Video</h2>
-                    <p className="text-gray-400 text-sm mb-6">Compiling shaders, baking lighting, and generating MP4 stream...</p>
-                    
-                    <div className="w-full bg-black rounded-full h-2 mb-2 overflow-hidden">
-                        <motion.div 
-                            className="h-full bg-gradient-to-r from-red-600 to-purple-600"
-                            initial={{ width: "0%" }}
-                            animate={{ width: "100%" }}
-                            transition={{ duration: 3, ease: "easeInOut" }}
-                        ></motion.div>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-8">
-                        <span>Encoding frames...</span>
-                        <span>1080p @ 60fps</span>
-                    </div>
+      {/* Content Rows */}
+      <div className="pb-20 px-6 md:px-16 space-y-12 relative z-20 -mt-10">
+          {BIBLE_STRUCTURE.map((section, idx) => (
+              <div key={idx}>
+                  <h2 className="text-lg font-bold text-gray-200 mb-4 flex items-center gap-2">
+                      {section.category}
+                      <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {section.books.map((book) => (
+                          <BookCard 
+                            key={book.n} 
+                            book={book} 
+                            theme={section.theme}
+                            onClick={() => handleBookClick(book, section.theme)}
+                          />
+                      ))}
+                  </div>
+              </div>
+          ))}
+      </div>
 
-                    <div className="flex justify-end">
-                        <button 
-                            onClick={() => setShowRenderModal(false)}
-                            className="text-gray-400 hover:text-white text-sm font-bold"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </motion.div>
-            </div>
-        )}
+      {/* Full Screen Player Modal */}
+      <AnimatePresence>
+          {selectedContent && (
+              <PlayerOverlay 
+                book={selectedContent.book}
+                chapter={selectedContent.chapter}
+                theme={selectedContent.theme}
+                onClose={() => setSelectedContent(null)}
+              />
+          )}
       </AnimatePresence>
+
     </div>
   );
 }
