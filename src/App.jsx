@@ -6,7 +6,8 @@ import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, M
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v4.1 - Production Fixes
+ * Scriptura Player v4.2 - Production Fixes
+ * - Fixed: Massive Duplicate Network Requests (Memoized Image Generation)
  * - Fixed: 403 Forbidden on Audio (Replaced Pixabay with Archive.org)
  * - Fixed: Image URL Encoding (Sanitized AI Prompts)
  * - Feature: Cinematic "Ken Burns" Effect
@@ -69,24 +70,26 @@ const fetchSceneData = async (book, chapter) => {
 const CinematicBackdrop = ({ isPlaying, bookName, theme }) => {
     const imageRef = useRef();
     
-    // 1. Determine Visual Keywords based on Book
-    const getKeywords = () => {
-        const flatBooks = BIBLE_STRUCTURE.flatMap(c => c.books.map(b => ({...b, parentKeywords: c.keywords})));
-        const bookData = flatBooks.find(b => b.n === bookName);
-        return bookData?.keywords || bookData?.parentKeywords || "clouds,light";
-    };
+    // 1. Determine Visual Keywords based on Book & Memoize
+    const imageUrl = useMemo(() => {
+        const getKeywords = () => {
+            const flatBooks = BIBLE_STRUCTURE.flatMap(c => c.books.map(b => ({...b, parentKeywords: c.keywords})));
+            const bookData = flatBooks.find(b => b.n === bookName);
+            return bookData?.keywords || bookData?.parentKeywords || "clouds,light";
+        };
 
-    const keywords = getKeywords();
-    
-    // 2. SANITIZED PROMPT GENERATION
-    // Encode the prompt to handle commas, spaces, and special characters correctly
-    const promptText = `cinematic shot of ${keywords}, bible scene, epic lighting, 8k, ultra realistic`;
-    const encodedPrompt = encodeURIComponent(promptText);
-    
-    // Using Pollinations.ai with specific seed for consistency per chapter
-    // We add a random component to seed to ensure fresh variation on reload if needed, 
-    // or use fixed seed for persistence. Here we use book+random for demo.
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&nologo=true&seed=${bookName}_${Math.floor(Math.random() * 1000)}`;
+        const keywords = getKeywords();
+        
+        // 2. SANITIZED PROMPT GENERATION
+        const promptText = `cinematic shot of ${keywords}, bible scene, epic lighting, 8k, ultra realistic`;
+        const encodedPrompt = encodeURIComponent(promptText);
+        
+        // Use a consistent random seed for this specific mount instance
+        // This prevents the URL from changing on every frame render
+        const seed = Math.floor(Math.random() * 1000);
+        
+        return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&nologo=true&seed=${bookName}_${seed}`;
+    }, [bookName]); // Only regenerate if the book changes
 
     // 3. Ken Burns Effect (Slow Pan & Zoom)
     useFrame((state, delta) => {
@@ -323,4 +326,101 @@ export default function App() {
                             <div className="flex items-center gap-3 mb-4">
                                 <span className="text-red-600 text-[10px] font-bold tracking-[0.3em] uppercase border border-red-600 px-3 py-1">Featured Series</span>
                             </div>
-                            <h2 className="text-5xl md:text-8xl
+                            <h2 className="text-5xl md:text-8xl font-serif text-white mb-6 leading-[0.9] tracking-tighter">The<br/>Apocalypse</h2>
+                            <p className="text-gray-300 text-lg md:text-xl font-light leading-relaxed max-w-xl">
+                                A cinematic visual exploration of the Apostle John's vision. Experience the end of days through our new AI-driven render engine.
+                            </p>
+                            
+                            <div className="mt-8 flex items-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                                <span className="text-xs font-bold uppercase tracking-widest text-white/50">Click to Explore</span>
+                                <ArrowLeft className="w-4 h-4 text-white rotate-180" />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {filteredBooks.map((section, idx) => (
+                    <div key={idx}>
+                        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-4">
+                            <div className={`w-8 h-px ${section.color}`}></div>
+                            {section.category}
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                            {section.books.map((book) => (
+                                <BookCard 
+                                    key={book.n} 
+                                    book={book} 
+                                    theme={section.theme}
+                                    onClick={() => openBook(book, section.theme)}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </motion.div>
+        )}
+
+        {/* VIEW: BOOK DETAIL */}
+        {view === 'bookDetail' && selectedBook && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <button 
+                    onClick={() => setView('browse')}
+                    className="flex items-center gap-2 text-gray-500 hover:text-white mb-8 transition uppercase text-xs font-bold tracking-widest"
+                >
+                    <ArrowLeft className="w-4 h-4" /> Return to Library
+                </button>
+
+                <div className="flex flex-col lg:flex-row gap-12 mb-12">
+                     <div className="w-full lg:w-1/3">
+                        <div className="aspect-[2/3] bg-zinc-900 rounded relative overflow-hidden shadow-2xl border border-white/5">
+                            <div className={`absolute inset-0 bg-gradient-to-br from-black via-transparent to-transparent z-10`}></div>
+                            <div className={`absolute inset-0 opacity-40 bg-gradient-to-t ${selectedBook.theme === 'law' ? 'from-amber-900' : 'from-blue-900'} to-gray-900`}></div>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-20">
+                                <h1 className="text-6xl font-serif tracking-tighter drop-shadow-2xl mb-2">{selectedBook.n}</h1>
+                                <div className="w-12 h-1 bg-red-600"></div>
+                            </div>
+                        </div>
+                     </div>
+                     
+                     <div className="flex-grow">
+                         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
+                            <div>
+                                <h2 className="text-3xl font-serif text-white">Select a Chapter</h2>
+                                <p className="text-gray-500 mt-2 font-light">Begin the cinematic visualizer.</p>
+                            </div>
+                         </div>
+                         
+                         <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-4">
+                             {Array.from({ length: selectedBook.c }).map((_, i) => {
+                                 const chapterNum = i + 1;
+                                 return (
+                                     <button 
+                                        key={i}
+                                        onClick={() => setSelectedContent({ book: selectedBook.n, chapter: chapterNum, theme: selectedBook.theme })}
+                                        className="aspect-square bg-white/5 hover:bg-red-900/40 border border-white/5 hover:border-red-600/50 transition-all duration-300 flex flex-col items-center justify-center group"
+                                     >
+                                         <span className="font-serif text-2xl text-gray-400 group-hover:text-white transition-colors">{chapterNum}</span>
+                                     </button>
+                                 )
+                             })}
+                         </div>
+                     </div>
+                </div>
+            </motion.div>
+        )}
+
+      </div>
+
+      {/* FULL SCREEN CINEMATIC PLAYER */}
+      <AnimatePresence>
+          {selectedContent && (
+              <PlayerOverlay 
+                content={selectedContent}
+                onClose={() => setSelectedContent(null)}
+              />
+          )}
+      </AnimatePresence>
+
+    </div>
+  );
+}
