@@ -91,6 +91,26 @@ export default function App() {
     // Prompt Engineering
     const prompt = `cinematic movie scene of ${book} chapter ${chapter}, ${snippet}, epic lighting, 8k resolution, historical accuracy, dramatic atmosphere, volumetric fog, photorealistic`;
 
+    // Helper: Free Fallback Generator
+    const generateWithPollinations = () => {
+        setEngineUsed("Pollinations (Free Fallback)");
+        setIsVideo(false);
+        
+        const encodedPrompt = encodeURIComponent(prompt);
+        const seed = Math.floor(Math.random() * 10000);
+        
+        // Using Pollinations Image Endpoint
+        const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
+        
+        const img = new Image();
+        img.src = url;
+        img.onload = () => setVisualUrl(url);
+        img.onerror = () => { 
+            // Ultimate fallback if even Pollinations fails (rare)
+            console.error("Pollinations failed");
+        }
+    };
+
     try {
       if (OPENAI_API_KEY) {
         // --- MODE A: OPENAI DALL-E 3 (High Quality Image) ---
@@ -113,36 +133,50 @@ export default function App() {
         });
 
         const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
+        
+        // Check for API errors (like Billing Limits)
+        if (data.error) {
+            console.warn("OpenAI API Error:", data.error.message);
+            setErrorMsg(`OpenAI Error: ${data.error.code || 'Failed'} - Switching to Free Engine`);
+            throw new Error(data.error.message); // Trigger catch block to use fallback
+        }
         
         if (data.data && data.data[0]) {
             setVisualUrl(data.data[0].url);
+            setErrorMsg(""); // Clear error if successful
         } else {
             throw new Error("No image data returned from OpenAI");
         }
 
+      } else if (HUGGING_FACE_TOKEN) {
+        // --- MODE B: HUGGING FACE (High Quality) ---
+        setEngineUsed("FLUX.1 (HF)");
+        const response = await fetch(
+          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
+          {
+            headers: { Authorization: `Bearer ${HUGGING_FACE_TOKEN}` },
+            method: "POST",
+            body: JSON.stringify({ inputs: prompt }),
+          }
+        );
+
+        if (!response.ok) throw new Error("HF API Error");
+        
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        setVisualUrl(objectUrl);
+
       } else {
         // --- MODE C: POLLINATIONS (Default Free) ---
-        setEngineUsed("Pollinations (Free)");
-        setIsVideo(false); // Pollinations returns Images, we will animate them via CSS
-        
-        const encodedPrompt = encodeURIComponent(prompt);
-        const seed = Math.floor(Math.random() * 10000);
-        
-        // Using Pollinations Image Endpoint
-        const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
-        
-        const img = new Image();
-        img.src = url;
-        img.onload = () => setVisualUrl(url);
-        img.onerror = () => { throw new Error("Pollinations failed to load"); }
+        generateWithPollinations();
       }
     } catch (error) {
       console.error("Gen Error:", error);
-      setErrorMsg(error.message || "Failed to generate visual");
-      setVisualUrl(`https://source.unsplash.com/1280x720/?bible,${book},ancient`);
-      setEngineUsed("Unsplash (Error Fallback)");
-      setIsVideo(false);
+      // If we haven't set a friendly error msg yet, set it now
+      if (!errorMsg) setErrorMsg(error.message || "Visual generation failed");
+      
+      // AUTO-FALLBACK: Use Pollinations if the paid/key APIs fail
+      generateWithPollinations();
     } finally {
       setIsLoading(false);
     }
