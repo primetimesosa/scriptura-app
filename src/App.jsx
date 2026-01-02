@@ -6,11 +6,10 @@ import { Play, Pause, ChevronLeft, ChevronRight, X, Search, BookOpen, Volume2, M
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Scriptura Player v6.0 - Full Suite
- * - Dashboard: Integrated One-Year Reading Plan with "Today's View"
- * - Features: Bookmarks, Progress Tracking, Search
- * - Engine: "Cinematic Parallax" (Simulates Video via Real-time Rendering)
- * - AI Integration: Structure ready for AWS Bedrock/Gemini Backend
+ * Scriptura Player v7.0 - Hybrid Engine (Runway ML Ready)
+ * - Feature: Hybrid Playback System (Supports MP4 Video OR Procedural 3D)
+ * - Integration: Ready for Runway ML / Sora generated video files
+ * - Fallback: Defaults to Real-time 3D engine if no video file is found
  */
 
 // --- DATA ---
@@ -46,10 +45,7 @@ const BIBLE_STRUCTURE = [
 ];
 
 // --- LOGIC: ONE YEAR PLAN ---
-// Simplified generator for demo purposes
 const generateDailyReadings = () => {
-    // This would typically come from a static JSON or API
-    // Generating a pseudo-plan: ~3 chapters a day
     const allChapters = [];
     BIBLE_STRUCTURE.forEach(cat => cat.books.forEach(book => {
         for(let i=1; i<=book.c; i++) allChapters.push({book: book.n, chapter: i, theme: cat.theme});
@@ -58,29 +54,39 @@ const generateDailyReadings = () => {
     const totalDays = 365;
     const chaptersPerDay = Math.ceil(allChapters.length / totalDays);
     
-    // Get "Today's" Reading based on day of year
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
     const diff = (now - start) + ((start.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
     const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
     
     const startIndex = (dayOfYear - 1) * chaptersPerDay;
-    return allChapters.slice(startIndex, startIndex + 3); // Return next 3 chapters
+    return allChapters.slice(startIndex, startIndex + 3); 
 };
 
-// --- AWS CONNECTION ---
+// --- AWS CONNECTION (Hybrid Mode) ---
 const fetchSceneData = async (book, chapter) => {
-    // This connects to the Lambda we deployed (ScripturaBackendStack)
-    // which effectively acts as the "Gemini/Bedrock" wrapper.
     const API_URL = "https://1alqvhm1da.execute-api.us-east-1.amazonaws.com/prod/scene"; 
+    
+    // DEMO LOGIC: Simulating that "Genesis 1" has a real Runway ML video
+    // In production, your backend would look up if an S3 URL exists for this chapter.
+    if (book === 'Genesis' && chapter === 1) {
+        return {
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4", // Placeholder for Runway video
+            summary: "The Creation: In the beginning God created the heavens and the earth.",
+            source: "RunwayML"
+        };
+    }
+
     try {
-        const response = await fetch(`${API_URL}?id=${book}-${chapter}`);
+        const response = await fetch(`${API_URL}?id=${book}-${chapter}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+        });
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const data = await response.json();
         return data;
     } catch (error) {
         console.warn("AI Fetch Failed (Using Fallback):", error);
-        // Fallback for demo when API is unreachable
         return {
             summary: `A visual exploration of ${book} chapter ${chapter}.`,
             isFallback: true
@@ -137,7 +143,7 @@ const useAtmosphericDrone = (isPlaying) => {
     }, [isPlaying]);
 };
 
-// --- SCENE LOADER COMPONENT ---
+// --- SCENE LOADER ---
 const SceneLoader = () => {
     const mesh = useRef();
     useFrame((state, delta) => {
@@ -152,21 +158,14 @@ const SceneLoader = () => {
                 <octahedronGeometry args={[1, 0]} />
                 <meshStandardMaterial color="white" wireframe />
             </mesh>
-            <Text 
-                position={[0, -1.5, 0]} 
-                fontSize={0.2} 
-                color="white"
-                anchorX="center" 
-                anchorY="middle"
-            >
-                GENERATING SCENE...
+            <Text position={[0, -1.5, 0]} fontSize={0.2} color="white" anchorX="center" anchorY="middle">
+                LOADING ASSETS...
             </Text>
         </group>
     );
 };
 
 // --- MULTI-PLANE ANIMATION ENGINE ---
-
 const CinematicLayer = ({ url, depth, speed, scale, opacity = 1, blending = THREE.NormalBlending }) => {
     const ref = useRef();
     useFrame((state) => {
@@ -201,7 +200,8 @@ const EpisodicDirector = ({ isPlaying, bookName }) => {
             return bookData?.keywords || bookData?.parentKeywords || "clouds, light, cinematic";
         };
         const keywords = getKeywords();
-        const seed = Math.floor(Math.random() * 9999);
+        
+        const seed = Math.floor(Math.random() * 99999);
         const RES = "width=1280&height=720";
 
         return [
@@ -276,8 +276,10 @@ const PlayerOverlay = ({ content, onClose, onComplete }) => {
     const [sceneData, setSceneData] = useState(null);
     const [progress, setProgress] = useState(0);
     const audioRef = useRef(null);
+    const videoRef = useRef(null);
 
-    useAtmosphericDrone(isPlaying && !isLoading);
+    // Only use drone if NOT playing a video file
+    useAtmosphericDrone(isPlaying && !isLoading && !sceneData?.videoUrl);
 
     useEffect(() => {
         setIsLoading(true);
@@ -289,7 +291,15 @@ const PlayerOverlay = ({ content, onClose, onComplete }) => {
 
     useEffect(() => {
         let interval;
-        if(isPlaying && !isLoading) {
+        
+        // Handle Video File Playback
+        if (sceneData?.videoUrl && videoRef.current) {
+            if (isPlaying) videoRef.current.play().catch(e => console.warn("Video Play:", e));
+            else videoRef.current.pause();
+        }
+
+        // Handle Progress (If procedural)
+        if(isPlaying && !isLoading && !sceneData?.videoUrl) {
             interval = setInterval(() => {
                 setProgress(p => {
                     if (p >= 100) {
@@ -301,7 +311,7 @@ const PlayerOverlay = ({ content, onClose, onComplete }) => {
             }, 50);
         }
         return () => clearInterval(interval);
-    }, [isPlaying, isLoading]);
+    }, [isPlaying, isLoading, sceneData]);
 
     return (
         <motion.div 
@@ -310,34 +320,51 @@ const PlayerOverlay = ({ content, onClose, onComplete }) => {
         >
             <div className="flex-grow relative bg-black overflow-hidden">
                 <div className="absolute inset-0">
-                    <Canvas camera={{ position: [0, 0, 6], fov: 35 }}>
-                        <Suspense fallback={<SceneLoader />}>
-                            <EpisodicDirector isPlaying={isPlaying} bookName={content.book} />
-                            <Preload all />
-                        </Suspense>
-                    </Canvas>
+                    {/* HYBRID RENDERER: Video File OR Procedural Engine */}
+                    {!isLoading && sceneData?.videoUrl ? (
+                        <video 
+                            ref={videoRef}
+                            src={sceneData.videoUrl}
+                            className="w-full h-full object-cover"
+                            loop
+                            playsInline
+                            onTimeUpdate={(e) => setProgress((e.target.currentTime / e.target.duration) * 100)}
+                        />
+                    ) : (
+                        <Canvas camera={{ position: [0, 0, 6], fov: 35 }}>
+                            <Suspense fallback={<SceneLoader />}>
+                                <EpisodicDirector key={content.book + content.chapter} isPlaying={isPlaying} bookName={content.book} />
+                                <Preload all />
+                            </Suspense>
+                        </Canvas>
+                    )}
                 </div>
 
-                {/* Overlays */}
-                <div className="absolute top-0 left-0 w-full h-[12%] bg-black z-10"></div>
-                <div className="absolute bottom-0 left-0 w-full h-[12%] bg-black z-10"></div>
-                <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-[5] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.8)_100%)] pointer-events-none z-[5]"></div>
+                {/* Overlays (Only show cinematics if NOT playing a real video file) */}
+                {!sceneData?.videoUrl && (
+                    <>
+                        <div className="absolute top-0 left-0 w-full h-[12%] bg-black z-10"></div>
+                        <div className="absolute bottom-0 left-0 w-full h-[12%] bg-black z-10"></div>
+                        <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-[5] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,0.8)_100%)] pointer-events-none z-[5]"></div>
+                        
+                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: [0, 1, 1, 0], scale: 1 }}
+                                transition={{ duration: 6, times: [0, 0.1, 0.8, 1] }} 
+                                className="text-center"
+                            >
+                                <h2 className="text-white/80 text-sm font-bold tracking-[0.5em] mb-4 uppercase drop-shadow-lg">Now Presenting</h2>
+                                <h1 className="text-6xl md:text-8xl font-serif text-white tracking-tighter drop-shadow-2xl">{content.book}</h1>
+                                <h3 className="text-xl md:text-2xl font-light text-red-500 tracking-[0.3em] uppercase mt-4">Chapter {content.chapter}</h3>
+                            </motion.div>
+                        </div>
+                    </>
+                )}
 
-                <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
-                     <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: [0, 1, 1, 0], scale: 1 }}
-                        transition={{ duration: 6, times: [0, 0.1, 0.8, 1] }} 
-                        className="text-center"
-                     >
-                        <h2 className="text-white/80 text-sm font-bold tracking-[0.5em] mb-4 uppercase drop-shadow-lg">Now Presenting</h2>
-                        <h1 className="text-6xl md:text-8xl font-serif text-white tracking-tighter drop-shadow-2xl">{content.book}</h1>
-                        <h3 className="text-xl md:text-2xl font-light text-red-500 tracking-[0.3em] uppercase mt-4">Chapter {content.chapter}</h3>
-                     </motion.div>
-                </div>
-
-                {!isLoading && sceneData && (
+                {/* Subtitles */}
+                {!isLoading && sceneData && !sceneData.videoUrl && (
                     <div className="absolute bottom-[15%] w-full flex justify-center z-20 px-10">
                         <motion.p 
                             initial={{ opacity: 0, y: 10 }}
@@ -350,7 +377,7 @@ const PlayerOverlay = ({ content, onClose, onComplete }) => {
                     </div>
                 )}
 
-                <button onClick={onClose} className="absolute top-8 right-8 z-30 text-white/50 hover:text-white transition p-2 bg-white/10 rounded-full backdrop-blur pointer-events-auto">
+                <button type="button" onClick={onClose} className="absolute top-8 right-8 z-30 text-white/50 hover:text-white transition p-2 bg-white/10 rounded-full backdrop-blur pointer-events-auto">
                     <X className="w-6 h-6" />
                 </button>
             </div>
@@ -360,12 +387,12 @@ const PlayerOverlay = ({ content, onClose, onComplete }) => {
             </div>
             
             <div className="absolute bottom-6 left-8 z-30 flex items-center gap-4">
-                 <button onClick={() => setIsPlaying(!isPlaying)} className="text-white hover:text-red-500 transition hover:scale-110">
+                 <button type="button" onClick={() => setIsPlaying(!isPlaying)} className="text-white hover:text-red-500 transition hover:scale-110">
                     {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
                  </button>
                  <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full ${isPlaying ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    {isPlaying ? 'Live Render' : 'Paused'}
+                    {sceneData?.videoUrl ? 'Runway ML Video' : 'Procedural Render'}
                  </div>
             </div>
         </motion.div>
@@ -453,8 +480,8 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-6 pointer-events-auto bg-black/50 backdrop-blur-md px-6 py-2 rounded-full border border-white/10">
-            <button onClick={() => setView('browse')} className={`text-sm font-bold transition ${view === 'browse' ? 'text-white' : 'text-gray-500 hover:text-white'}`}>Library</button>
-            <button onClick={() => setView('dashboard')} className={`text-sm font-bold transition ${view === 'dashboard' ? 'text-white' : 'text-gray-500 hover:text-white'}`}>Dashboard</button>
+            <button type="button" onClick={() => setView('browse')} className={`text-sm font-bold transition ${view === 'browse' ? 'text-white' : 'text-gray-500 hover:text-white'}`}>Library</button>
+            <button type="button" onClick={() => setView('dashboard')} className={`text-sm font-bold transition ${view === 'dashboard' ? 'text-white' : 'text-gray-500 hover:text-white'}`}>Dashboard</button>
         </div>
 
         <div className="flex items-center gap-4 pointer-events-auto">
@@ -532,6 +559,7 @@ export default function App() {
         {view === 'bookDetail' && selectedBook && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <button 
+                    type="button"
                     onClick={() => setView('browse')}
                     className="flex items-center gap-2 text-gray-500 hover:text-white mb-8 transition uppercase text-xs font-bold tracking-widest"
                 >
@@ -563,6 +591,7 @@ export default function App() {
                                  const chapterNum = i + 1;
                                  return (
                                      <button 
+                                        type="button"
                                         key={i}
                                         onClick={() => setSelectedContent({ book: selectedBook.n, chapter: chapterNum, theme: selectedBook.theme })}
                                         className="aspect-square bg-white/5 hover:bg-red-900/40 border border-white/5 hover:border-red-600/50 transition-all duration-300 flex flex-col items-center justify-center group"
