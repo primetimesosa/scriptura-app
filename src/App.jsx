@@ -6,7 +6,7 @@ import { Play, Pause, ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX, Loa
  * Supports:
  * 1. OpenAI DALL-E 3 (Best Quality - Requires API Key in Env Vars)
  * 2. Hugging Face FLUX.1 (High Quality - Requires Token in Env Vars)
- * 3. Pollinations.ai (Fallback - Free, No Key) - Now supports Video generation
+ * 3. Pollinations.ai (Fallback - Free, No Key) - Generates Cinematic Stills
  */
 
 // --- CONFIGURATION ---
@@ -62,8 +62,6 @@ export default function App() {
 
       try {
         // Changed translation to 'web' (World English Bible) which is closer to NLT in readability and Public Domain.
-        // Note: The official 'nlt' is copyrighted and often not available on free public APIs without a key.
-        // 'web' is a good modern English fallback if NLT specifically fails on this endpoint.
         const response = await fetch(`https://bible-api.com/${selectedBook}+${selectedChapter}?translation=web`);
         const data = await response.json();
         
@@ -97,7 +95,7 @@ export default function App() {
       if (OPENAI_API_KEY) {
         // --- MODE A: OPENAI DALL-E 3 (High Quality Image) ---
         setEngineUsed("DALL-E 3");
-        setIsVideo(false);
+        setIsVideo(false); // DALL-E returns Images, so we treat it as an animated background
         const response = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: {
@@ -124,20 +122,14 @@ export default function App() {
         }
 
       } else {
-        // --- MODE C: POLLINATIONS VIDEO (Default Free Video) ---
-        setEngineUsed("Pollinations Video (Free)");
-        setIsVideo(true); // Enable video mode
+        // --- MODE C: POLLINATIONS (Default Free) ---
+        setEngineUsed("Pollinations (Free)");
+        setIsVideo(false); // Pollinations returns Images, we will animate them via CSS
         
         const encodedPrompt = encodeURIComponent(prompt);
         const seed = Math.floor(Math.random() * 10000);
-        // Pollinations now supports a /prompt/ video endpoint (experimental but works for short clips)
-        // or we use the 'turbo' model which is fast enough to simulate movement if we request it properly.
-        // Here we request a GIF/Video format if supported, or high quality image.
-        // For actual video generation without a paid key, we use the Pollinations video endpoint if available,
-        // or fallback to their high-speed image endpoint which loads fast enough to feel responsive.
         
-        // NOTE: True text-to-video APIs (Runway, Sora, Luma) are expensive/waitlisted.
-        // We will use a reliable high-quality cinematic render URL.
+        // Using Pollinations Image Endpoint
         const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
         
         const img = new Image();
